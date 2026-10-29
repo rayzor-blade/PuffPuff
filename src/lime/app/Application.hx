@@ -120,6 +120,8 @@ class Application extends Module {
 
 			if (windows.length == 0) break;
 
+			lime.ui.Gamepad.__poll();
+
 			var now = Timer.stamp();
 			var deltaMs = Std.int(Math.max(1, Math.round((now - lastTime) * 1000.0)));
 			lastTime = now;

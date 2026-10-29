@@ -11,11 +11,19 @@ import lime.math.Vector4;
 import lime.media.AudioBuffer;
 import lime.media.AudioSource;
 import lime.system.System;
+import lime.text.Font;
+import lime.ui.Gamepad;
+import lime.ui.GamepadAxis;
+import lime.ui.GamepadButton;
 import lime.ui.KeyCode;
 import lime.ui.KeyModifier;
 import lime.ui.MouseButton;
+import lime.ui.Touch;
+import lime.utils.Assets;
 import lime.utils.Float32Array;
+import lime.utils.Int16Array;
 import lime.utils.UInt8Array;
+import puffpuff.snapshot.Png;
 
 class Phase1SmokeTest extends Application {
 	private var hue:Float = 0.0;
@@ -62,7 +70,26 @@ class Phase1SmokeTest extends Application {
 		audioSrc.gain = 0.75;
 		if (audioSrc.gain != 0.75) throw 'AudioSource gain test failed';
 
-		// 5. Test Window + WgpuContext + Application render loop (3 frames)
+		// 5. Test Int16Array, PNG encode/decode roundtrip, Assets, Gamepad, Touch, Font
+		var i16 = new Int16Array([-32000, 0, 32000]);
+		if (i16[0] != -32000 || i16[2] != 32000) throw 'Int16Array signed test failed: ${i16[0]}, ${i16[2]}';
+
+		var encodedPng = Png.encode(img.width, img.height, img.data);
+		var decodedImg = Image.fromBytes(encodedPng);
+		if (decodedImg == null || decodedImg.width != 16 || decodedImg.height != 16) throw 'Image PNG roundtrip failed';
+		if (decodedImg.data.get(0) != 0x33 || decodedImg.data.get(1) != 0x66 || decodedImg.data.get(2) != 0x99) {
+			throw 'Image PNG pixel mismatch';
+		}
+
+		Gamepad.__poll();
+		if (GamepadButton.toString(GamepadButton.A) != "A") throw 'GamepadButton test failed';
+		if (GamepadAxis.toString(GamepadAxis.LEFT_X) != "LEFT_X") throw 'GamepadAxis test failed';
+		var touch = new Touch(0.5, 0.5, 1, 0, 0, 1.0, 0);
+		if (touch.id != 1) throw 'Touch test failed';
+		var font = new Font("PuffSans");
+		if (font.name != "PuffSans") throw 'Font test failed';
+
+		// 6. Test Window + WgpuContext + Application render loop (3 frames)
 		var app = new Phase1SmokeTest();
 		app.create({
 			windows: [{

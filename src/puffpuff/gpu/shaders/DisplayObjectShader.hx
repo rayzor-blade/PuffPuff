@@ -34,3 +34,4 @@ class DisplayObjectShader implements hlwgpu.hxsl.Shader {
 		}
 	};
 }
+

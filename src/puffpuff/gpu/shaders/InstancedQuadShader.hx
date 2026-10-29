@@ -45,3 +45,4 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 		}
 	};
 }
+

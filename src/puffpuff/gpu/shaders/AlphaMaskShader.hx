@@ -40,3 +40,4 @@ class AlphaMaskShader implements hlwgpu.hxsl.Shader {
 		}
 	};
 }
+

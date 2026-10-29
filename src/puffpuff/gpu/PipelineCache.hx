@@ -144,3 +144,4 @@ class PipelineCache {
 		cache.clear();
 	}
 }
+

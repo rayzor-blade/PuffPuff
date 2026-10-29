@@ -1,6 +1,8 @@
 package lime.graphics;
 
 import haxe.io.Bytes;
+import lime.app.Future;
+import puffpuff.snapshot.Png;
 
 class ImageBuffer {
 	public var bitsPerPixel:Int;
@@ -97,6 +99,29 @@ class Image {
 
 	public function clone():Image {
 		return new Image(buffer != null ? buffer.clone() : null, offsetX, offsetY, width, height);
+	}
+
+	public static function fromBytes(bytes:Bytes):Image {
+		if (bytes == null || bytes.length < 8) return null;
+		if (bytes.get(0) == 0x89 && bytes.get(1) == 0x50) {
+			var decoded = Png.decode(bytes);
+			var buf = new ImageBuffer(decoded.pixels, decoded.width, decoded.height, 32, 0);
+			return new Image(buf, 0, 0, decoded.width, decoded.height);
+		}
+		return null;
+	}
+
+	public static function fromFile(path:String):Image {
+		if (path == null || !sys.FileSystem.exists(path)) return null;
+		return fromBytes(sys.io.File.getBytes(path));
+	}
+
+	public static function loadFromBytes(bytes:Bytes):Future<Image> {
+		return new Future<Image>(() -> fromBytes(bytes), true);
+	}
+
+	public static function loadFromFile(path:String):Future<Image> {
+		return new Future<Image>(() -> fromFile(path), true);
 	}
 
 	private inline function get_data():Bytes return buffer != null ? buffer.data : null;

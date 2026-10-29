@@ -216,6 +216,21 @@ class Window {
 						case Utf8(p): onDropFile.dispatch(p);
 						default:
 					}
+				case Touch(devId, phase, tx, ty, force, tid):
+					var normX = width > 0 ? tx / width : 0.0;
+					var normY = height > 0 ? ty / height : 0.0;
+					var press = switch (force) {
+						case Normalized(f): f;
+						case Calibrated(f, maxF, _): maxF > 0 ? f / maxF : 1.0;
+						case None: 1.0;
+					};
+					var touchObj = new Touch(normX, normY, haxe.Int64.toInt(tid), 0.0, 0.0, press, devId);
+					switch (phase) {
+						case Started: Touch.onStart.dispatch(touchObj);
+						case Moved: Touch.onMove.dispatch(touchObj);
+						case Ended: Touch.onEnd.dispatch(touchObj);
+						case Cancelled: Touch.onCancel.dispatch(touchObj);
+					}
 				default:
 			}
 		}

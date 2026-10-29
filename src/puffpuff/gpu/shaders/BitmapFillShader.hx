@@ -27,3 +27,4 @@ class BitmapFillShader implements hlwgpu.hxsl.Shader {
 		}
 	};
 }
+
