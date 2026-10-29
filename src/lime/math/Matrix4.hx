@@ -7,6 +7,14 @@ import lime.utils.Float32Array;
  * 4x4 Matrix backed by `Float32Array` (`hl.Bytes`) and accelerated via `ash-simd`.
  */
 abstract Matrix4(Float32Array) from Float32Array to Float32Array {
+	public var buffer(get, never):haxe.io.Bytes;
+	public var byteOffset(get, never):Int;
+	public var byteLength(get, never):Int;
+
+	private inline function get_buffer():haxe.io.Bytes return this.buffer;
+	private inline function get_byteOffset():Int return this.byteOffset;
+	private inline function get_byteLength():Int return this.byteLength;
+
 	public inline function new(data:Float32Array = null) {
 		if (data != null) {
 			this = data;
@@ -73,12 +81,16 @@ abstract Matrix4(Float32Array) from Float32Array to Float32Array {
 		var tz = -zNear / (zFar - zNear);
 
 		identity();
+		// Stored so that HXSL/WGSL `vec4(pos, 0, 1) * matrix` (where WGSL `v * M` computes dot(v, col_i))
+		// transforms x' = x*sx + tx, y' = y*sy + ty, z' = z*sz + tz, w' = 1:
+		// Col 0: (sx, 0, 0, tx), Col 1: (0, sy, 0, ty), Col 2: (0, 0, sz, tz), Col 3: (0, 0, 0, 1)
 		this[0] = sx;
+		this[3] = tx;
 		this[5] = sy;
+		this[7] = ty;
 		this[10] = sz;
-		this[12] = tx;
-		this[13] = ty;
-		this[14] = tz;
+		this[11] = tz;
+		this[15] = 1.0;
 	}
 
 	@:arrayAccess

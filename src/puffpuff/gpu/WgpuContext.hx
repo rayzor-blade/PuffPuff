@@ -32,6 +32,14 @@ class WgpuContext {
 
 	public var currentView(default, null):Null<GpuTextureView>;
 	public var currentEncoder(default, null):Null<GpuEncoder>;
+	public var context3D(get, null):WgpuContext3D;
+
+	private function get_context3D():WgpuContext3D {
+		if (context3D == null) {
+			context3D = new WgpuContext3D(this);
+		}
+		return context3D;
+	}
 
 	public function new(nativeWindow:Null<window.Window>, vsync:Bool = true, offscreenFormat:TextureFormat = Rgba8unorm) {
 		this.vsync = vsync;
@@ -104,6 +112,9 @@ class WgpuContext {
 		}
 		currentView = null;
 		device.poll();
+		if (context3D != null) {
+			context3D.flushTempResources();
+		}
 	}
 
 	public function configureSurface(pixelWidth:Int, pixelHeight:Int):Void {
@@ -162,9 +173,16 @@ class WgpuContext {
 			currentView = null;
 		}
 		device.poll();
+		if (context3D != null) {
+			context3D.flushTempResources();
+		}
 	}
 
 	public function destroy():Void {
+		if (context3D != null) {
+			context3D.dispose();
+			context3D = null;
+		}
 		if (currentEncoder != null && currentEncoder.valid()) {
 			currentEncoder.destroy();
 			currentEncoder = null;
