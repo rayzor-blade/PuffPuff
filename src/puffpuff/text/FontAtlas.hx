@@ -1,98 +1,264 @@
 package puffpuff.text;
 
 import haxe.io.Bytes;
-import lime.graphics.Image;
-import lime.graphics.Image.ImageBuffer;
 import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.WgpuContext3D;
 import puffpuff.gpu.WgpuContext3D.WgpuTexture;
+import puffpuff.text.GlyphOutlines.TextStyle;
+import puffpuff.text.TextNative.TextUtf8;
 
-typedef GlyphMetrics = {
+typedef PreparedGlyph = {
+	var x:Float;
+	var y:Float;
+	var width:Float;
+	var height:Float;
 	var u0:Float;
 	var v0:Float;
 	var u1:Float;
 	var v1:Float;
-	var width:Int;
-	var height:Int;
-	var advance:Int;
+	var isColor:Bool;
+}
+
+typedef PreparedRun = {
+	var glyphs:Array<PreparedGlyph>;
+	var width:Float;
+	var ascent:Float;
+	var descent:Float;
+	var lineHeight:Float;
 }
 
 /**
- * Built-in crisp bitmap glyph rasterizer and GPU texture atlas for `lime.text.Font`, `openfl.text.TextField`, and `FlxText`.
- * Generates a 128x64 RGBA8 atlas containing printable ASCII (32..126) 8x8 glyphs with optional anti-aliased drop shadow/outline.
+ * GPU glyph atlas and text shaper powered by `blinc_abi`.
+ * Shapes Unicode text with kerning, fallback fonts, and variable weights via `blinc_text_prepare`,
+ * and incrementally syncs dirty sub-rectangles from the native coverage and color atlases.
  */
 class FontAtlas {
-	public static inline var ATLAS_WIDTH:Int = 128;
-	public static inline var ATLAS_HEIGHT:Int = 64;
-	public static inline var CELL_W:Int = 8;
-	public static inline var CELL_H:Int = 8;
-
-	public var image(default, null):Image;
 	public var texture(default, null):Null<WgpuTexture>;
-	public var glyphs(default, null):Map<Int, GlyphMetrics>;
+	public var colorTexture(default, null):Null<WgpuTexture>;
+	public var revision(default, null):Int = 0;
+	public var colorRevision(default, null):Int = 0;
 
-	private static var __defaultAtlas:Null<FontAtlas>;
+	static var __defaultAtlas:Null<FontAtlas>;
+	static var __gammaLut:Null<Bytes>;
+
+	final info:Bytes = Bytes.alloc(28);
+	var rawPixels:Bytes = Bytes.alloc(0);
+	var rgbaPixels:Bytes = Bytes.alloc(0);
+	var seen:Int = 0;
+	var colorSeen:Int = 0;
 
 	public static function getDefault(context3D:WgpuContext3D = null):FontAtlas {
 		if (__defaultAtlas == null) {
 			__defaultAtlas = new FontAtlas();
 		}
-		if (context3D != null && __defaultAtlas.texture == null) {
+		if (context3D != null) {
 			__defaultAtlas.upload(context3D);
 		}
 		return __defaultAtlas;
 	}
 
-	public function new() {
-		glyphs = new Map<Int, GlyphMetrics>();
-		var bytes = Bytes.alloc(ATLAS_WIDTH * ATLAS_HEIGHT * 4);
-
-		for (code in 32...127) {
-			var idx = code - 32;
-			var col = idx % 16;
-			var row = Std.int(idx / 16);
-			var ox = col * CELL_W;
-			var oy = row * CELL_H;
-
-			var rows = getGlyphBitmap(code);
-			for (py in 0...8) {
-				var bits = rows[py];
-				for (px in 0...8) {
-					var on = ((bits >> (7 - px)) & 1) != 0;
-					var pIdx = ((oy + py) * ATLAS_WIDTH + (ox + px)) * 4;
-					if (on) {
-						bytes.set(pIdx, 255);
-						bytes.set(pIdx + 1, 255);
-						bytes.set(pIdx + 2, 255);
-						bytes.set(pIdx + 3, 255);
-					}
-				}
+	static function getGammaLut():Bytes {
+		if (__gammaLut == null) {
+			__gammaLut = Bytes.alloc(256);
+			for (i in 0...256) {
+				var lifted = Std.int(Math.pow(i / 255.0, 0.7) * 255.0 + 0.5);
+				__gammaLut.set(i, lifted > 255 ? 255 : lifted);
 			}
-
-			glyphs.set(code, {
-				u0: ox / ATLAS_WIDTH,
-				v0: oy / ATLAS_HEIGHT,
-				u1: (ox + CELL_W) / ATLAS_WIDTH,
-				v1: (oy + CELL_H) / ATLAS_HEIGHT,
-				width: CELL_W,
-				height: CELL_H,
-				advance: CELL_W
-			});
 		}
+		return __gammaLut;
+	}
 
-		image = new Image(new ImageBuffer(bytes, ATLAS_WIDTH, ATLAS_HEIGHT, 32, 0), 0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+	public function new() {
+		Fonts.ensureBundled();
 	}
 
 	public function upload(context3D:WgpuContext3D):WgpuTexture {
+		if (context3D == null) return texture;
 		if (texture == null) {
-			texture = context3D.createTexture(ATLAS_WIDTH, ATLAS_HEIGHT);
-			texture.uploadFromImage(image);
+			texture = context3D.createTexture(1, 1);
 		}
+		if (colorTexture == null) {
+			colorTexture = context3D.createTexture(1, 1);
+		}
+		sync(context3D);
 		return texture;
 	}
 
 	/**
-	 * Queues instanced glyph quads for `text` into `batcher` at `(x, y)` with `size` (pixel height) and `color` (0xRRGGBB).
+	 * Synchronizes both the coverage glyph atlas and the color-emoji glyph atlas with the GPU.
+	 */
+	public function sync(context3D:WgpuContext3D):Void {
+		if (context3D == null) return;
+		if (texture == null) texture = context3D.createTexture(1, 1);
+		if (colorTexture == null) colorTexture = context3D.createTexture(1, 1);
+		syncTarget(texture, false);
+		syncTarget(colorTexture, true);
+	}
+
+	function syncTarget(target:WgpuTexture, color:Bool):Void {
+		#if hl
+		var which = color ? 1 : 0;
+		var currentSeen = color ? colorSeen : seen;
+		if (!take(which, currentSeen)) return;
+
+		var width = info.getInt32(0);
+		var height = info.getInt32(4);
+		if (width <= 0 || height <= 0) return;
+
+		if (target.width != width || target.height != height) {
+			target.resize(width, height);
+			if (info.getInt32(20) != width || info.getInt32(24) != height) {
+				if (!take(which, 0)) return;
+			}
+			if (color) colorRevision++; else revision++;
+		}
+
+		var nextSeen = info.getInt32(8);
+		if (color) colorSeen = nextSeen; else seen = nextSeen;
+
+		var x = info.getInt32(12);
+		var y = info.getInt32(16);
+		var w = info.getInt32(20);
+		var h = info.getInt32(24);
+		if (w <= 0 || h <= 0) return;
+
+		if (color) {
+			target.uploadRegion(x, y, w, h, rawPixels, w * 4);
+		} else {
+			var count = w * h;
+			var needed = count * 4;
+			if (rgbaPixels.length < needed) {
+				rgbaPixels = Bytes.alloc(needed);
+			}
+			var lut = getGammaLut();
+			for (i in 0...count) {
+				var cov = rawPixels.get(i);
+				var off = i << 2;
+				rgbaPixels.set(off, 255);
+				rgbaPixels.set(off + 1, 255);
+				rgbaPixels.set(off + 2, 255);
+				rgbaPixels.set(off + 3, lut.get(cov));
+			}
+			target.uploadRegion(x, y, w, h, rgbaPixels, w * 4);
+		}
+		#end
+	}
+
+	function take(which:Int, since:Int):Bool {
+		#if hl
+		var size = TextNative.blinc_text_atlas_take(which, since, rawPixels.getData(), rawPixels.length, info.getData());
+		if (size == 0) return false;
+		if (size > rawPixels.length) {
+			rawPixels = Bytes.alloc(size + (size >> 1));
+			size = TextNative.blinc_text_atlas_take(which, since, rawPixels.getData(), rawPixels.length, info.getData());
+		}
+		return size > 0;
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * Shapes `text` and rasterizes its glyphs into the native atlas, returning glyph positions,
+	 * atlas pixel rects, and line metrics.
+	 */
+	public function prepare(text:String, ?style:TextStyle):PreparedRun {
+		Fonts.ensureBundled();
+		var s:TextStyle = style != null ? style : {};
+		var size:Float = s.size != null ? s.size : 16.0;
+		var weight:Int = s.weight != null ? s.weight : 400;
+		var italic = s.italic == true;
+		var generic:Int = s.generic != null ? s.generic : 0;
+		var spacing:Float = s.letterSpacing != null ? s.letterSpacing : 0.0;
+		var leading:Float = s.lineHeight != null ? s.lineHeight : 0.0;
+
+		if (text == null || text.length == 0) {
+			return {
+				glyphs: [],
+				width: 0.0,
+				ascent: size * 0.8,
+				descent: size * 0.2,
+				lineHeight: size * 1.2
+			};
+		}
+
+		#if hl
+		var runInfo = new hl.Bytes(16);
+		var fontBytes = s.family == null ? null : TextUtf8.encode(s.family);
+		var textBytes = TextUtf8.encode(text);
+		var capacity = (text.length + 8) * 9;
+		var out = new hl.Bytes(capacity * 4);
+		var set = new hl.Bytes(24);
+		set.setF32(0, generic * 1.0);
+		set.setF32(4, weight * 1.0);
+		set.setF32(8, italic ? 1.0 : 0.0);
+		set.setF32(12, size);
+		set.setF32(16, spacing);
+		set.setF32(20, leading);
+
+		var n = TextNative.blinc_text_prepare(textBytes, fontBytes, set, out, capacity, runInfo);
+		if (n > capacity) {
+			capacity = n;
+			out = new hl.Bytes(capacity * 4);
+			n = TextNative.blinc_text_prepare(textBytes, fontBytes, set, out, capacity, runInfo);
+		}
+
+		var count = Std.int(n / 9);
+		var glyphs:Array<PreparedGlyph> = [];
+		for (i in 0...count) {
+			var base = i * 36;
+			glyphs.push({
+				x: out.getF32(base),
+				y: out.getF32(base + 4),
+				width: out.getF32(base + 8),
+				height: out.getF32(base + 12),
+				u0: out.getF32(base + 16),
+				v0: out.getF32(base + 20),
+				u1: out.getF32(base + 24),
+				v1: out.getF32(base + 28),
+				isColor: out.getF32(base + 32) > 0.5
+			});
+		}
+
+		return {
+			glyphs: glyphs,
+			width: runInfo.getF32(0),
+			ascent: runInfo.getF32(4),
+			descent: runInfo.getF32(8),
+			lineHeight: runInfo.getF32(12)
+		};
+		#else
+		return {
+			glyphs: [],
+			width: 0.0,
+			ascent: size * 0.8,
+			descent: size * 0.2,
+			lineHeight: size * 1.2
+		};
+		#end
+	}
+
+	public function measureText(text:String, size:Float = 16.0, ?style:TextStyle):{width:Float, ascent:Float, descent:Float, lineHeight:Float} {
+		var s:TextStyle = style != null ? {
+			size: style.size != null ? style.size : size,
+			family: style.family,
+			generic: style.generic,
+			weight: style.weight,
+			italic: style.italic,
+			letterSpacing: style.letterSpacing,
+			lineHeight: style.lineHeight
+		} : {size: size};
+		var run = prepare(text, s);
+		return {
+			width: run.width,
+			ascent: run.ascent,
+			descent: run.descent,
+			lineHeight: run.lineHeight
+		};
+	}
+
+	/**
+	 * Shapes `text`, syncs the GPU glyph atlas, and queues instanced glyph quads into `batcher`.
 	 */
 	public function drawText(
 		batcher:QuadBatcher,
@@ -101,85 +267,43 @@ class FontAtlas {
 		y:Float,
 		size:Float = 16.0,
 		color:Int = 0xFFFFFF,
-		alpha:Float = 1.0
+		alpha:Float = 1.0,
+		?style:TextStyle
 	):Void {
-		if (text == null || text.length == 0) return;
-		var scale = size / CELL_H;
-		var cursorX = x;
-		var cursorY = y;
+		if (batcher == null || text == null || text.length == 0) return;
+		var s:TextStyle = style != null ? {
+			size: style.size != null ? style.size : size,
+			family: style.family,
+			generic: style.generic,
+			weight: style.weight,
+			italic: style.italic,
+			letterSpacing: style.letterSpacing,
+			lineHeight: style.lineHeight
+		} : {size: size};
 
-		for (i in 0...text.length) {
-			var code = text.charCodeAt(i);
-			if (code == 10) { // '\n'
-				cursorX = x;
-				cursorY += size * 1.25;
-				continue;
-			}
-			var g = glyphs.get(code);
-			if (g == null) g = glyphs.get(32);
-			if (code != 32 && g != null) {
-				var gw = g.width * scale;
-				var gh = g.height * scale;
-				batcher.addQuad(
-					gw, 0.0, 0.0, gh,
-					cursorX, cursorY,
-					g.u0, g.v0, g.u1 - g.u0, g.v1 - g.v0,
-					alpha, color
-				);
-			}
-			cursorX += (g != null ? g.advance : CELL_W) * scale;
+		var run = prepare(text, s);
+		sync(batcher.context3D);
+		if (texture == null) return;
+
+		if (batcher.texture == null) {
+			batcher.begin(texture);
 		}
-	}
 
-	private static function getGlyphBitmap(code:Int):Array<Int> {
-		return switch (code) {
-			case 32: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]; // ' '
-			case 33: [0x18, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x18, 0x00]; // '!'
-			case 40: [0x0C, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0C, 0x00]; // '('
-			case 41: [0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x18, 0x30, 0x00]; // ')'
-			case 43: [0x00, 0x18, 0x18, 0x7E, 0x18, 0x18, 0x00, 0x00]; // '+'
-			case 44: [0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30]; // ','
-			case 45: [0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00]; // '-'
-			case 46: [0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00]; // '.'
-			case 47: [0x06, 0x0C, 0x18, 0x30, 0x60, 0xC0, 0x80, 0x00]; // '/'
-			case 48: [0x3C, 0x66, 0x6E, 0x76, 0x66, 0x66, 0x3C, 0x00]; // '0'
-			case 49: [0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00]; // '1'
-			case 50: [0x3C, 0x66, 0x06, 0x1C, 0x30, 0x66, 0x7E, 0x00]; // '2'
-			case 51: [0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00]; // '3'
-			case 52: [0x0E, 0x1E, 0x36, 0x66, 0x7F, 0x06, 0x0F, 0x00]; // '4'
-			case 53: [0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00]; // '5'
-			case 54: [0x1C, 0x30, 0x60, 0x7C, 0x66, 0x66, 0x3C, 0x00]; // '6'
-			case 55: [0x7E, 0x66, 0x06, 0x0C, 0x18, 0x18, 0x18, 0x00]; // '7'
-			case 56: [0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00]; // '8'
-			case 57: [0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00]; // '9'
-			case 58: [0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00]; // ':'
-			case 65 | 97: [0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00]; // 'A'
-			case 66 | 98: [0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00]; // 'B'
-			case 67 | 99: [0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00]; // 'C'
-			case 68 | 100: [0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00]; // 'D'
-			case 69 | 101: [0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00]; // 'E'
-			case 70 | 102: [0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00]; // 'F'
-			case 71 | 103: [0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3E, 0x00]; // 'G'
-			case 72 | 104: [0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00]; // 'H'
-			case 73 | 105: [0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00]; // 'I'
-			case 74 | 106: [0x1E, 0x0C, 0x0C, 0x0C, 0x6C, 0x6C, 0x38, 0x00]; // 'J'
-			case 75 | 107: [0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00]; // 'K'
-			case 76 | 108: [0x60, 0x60, 0x60, 0x60, 0x60, 0x66, 0x7E, 0x00]; // 'L'
-			case 77 | 109: [0x63, 0x77, 0x7F, 0x6B, 0x63, 0x63, 0x63, 0x00]; // 'M'
-			case 78 | 110: [0x66, 0x76, 0x7E, 0x7E, 0x6E, 0x66, 0x66, 0x00]; // 'N'
-			case 79 | 111: [0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00]; // 'O'
-			case 80 | 112: [0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00]; // 'P'
-			case 81 | 113: [0x3C, 0x66, 0x66, 0x66, 0x6A, 0x6C, 0x36, 0x00]; // 'Q'
-			case 82 | 114: [0x7C, 0x66, 0x66, 0x7C, 0x6C, 0x66, 0x66, 0x00]; // 'R'
-			case 83 | 115: [0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00]; // 'S'
-			case 84 | 116: [0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00]; // 'T'
-			case 85 | 117: [0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00]; // 'U'
-			case 86 | 118: [0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00]; // 'V'
-			case 87 | 119: [0x63, 0x63, 0x63, 0x6B, 0x7F, 0x77, 0x63, 0x00]; // 'W'
-			case 88 | 120: [0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00]; // 'X'
-			case 89 | 121: [0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00]; // 'Y'
-			case 90 | 122: [0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00]; // 'Z'
-			default: [0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E, 0x00];
-		};
+		var invW = 1.0 / texture.width;
+		var invH = 1.0 / texture.height;
+		var colorInvW = colorTexture != null ? 1.0 / colorTexture.width : invW;
+		var colorInvH = colorTexture != null ? 1.0 / colorTexture.height : invH;
+
+		for (g in run.glyphs) {
+			if (g.width <= 0 || g.height <= 0) continue;
+			var iw = g.isColor ? colorInvW : invW;
+			var ih = g.isColor ? colorInvH : invH;
+			batcher.addQuad(
+				g.width, 0.0, 0.0, g.height,
+				x + g.x, y + g.y,
+				g.u0 * iw, g.v0 * ih, (g.u1 - g.u0) * iw, (g.v1 - g.v0) * ih,
+				alpha, g.isColor ? 0xFFFFFF : color
+			);
+		}
 	}
 }

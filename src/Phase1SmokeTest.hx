@@ -86,8 +86,12 @@ class Phase1SmokeTest extends Application {
 		if (GamepadAxis.toString(GamepadAxis.LEFT_X) != "LEFT_X") throw 'GamepadAxis test failed';
 		var touch = new Touch(0.5, 0.5, 1, 0, 0, 1.0, 0);
 		if (touch.id != 1) throw 'Touch test failed';
-		var font = new Font("PuffSans");
-		if (font.name != "PuffSans") throw 'Font test failed';
+		var font = new Font("Arimo");
+		if (font.name != "Arimo" || font.ascender <= 0 || font.descender >= 0) throw 'Font metrics test failed';
+		var measured = font.measureText("PuffPuff GPU Text", 24.0);
+		if (measured.width <= 0 || measured.ascent <= 0) throw 'Font measureText test failed';
+		var outline = font.getOutline("PuffPuff", 24.0);
+		if (outline == null || outline.commands.length == 0) throw 'Font getOutline test failed';
 
 		// 6. Test Window + WgpuContext + Application render loop (3 frames)
 		var app = new Phase1SmokeTest();

@@ -15,10 +15,13 @@ import gpu.GpuBuffer;
 import gpu.GpuBufferDescriptor;
 import gpu.GpuDevice;
 import gpu.GpuExtent3D;
+import gpu.GpuOrigin3D;
 import gpu.GpuPipeline;
 import gpu.GpuSampler;
 import gpu.GpuSamplerDescriptor;
 import gpu.GpuShader;
+import gpu.GpuTexelCopyBufferLayout;
+import gpu.GpuTexelCopyTextureInfo;
 import gpu.GpuTexture;
 import gpu.GpuTextureDescriptor;
 import gpu.GpuTextureView;
@@ -160,6 +163,40 @@ class WgpuTexture {
 		if (bytes == null) return;
 		if (bytesPerRow <= 0) bytesPerRow = width * 4;
 		context.wgpu.queue.writeTexture(gpuTexture, bytes, width, height, bytesPerRow);
+	}
+
+	public function uploadRegion(x:Int, y:Int, w:Int, h:Int, bytes:Bytes, bytesPerRow:Int = 0):Void {
+		if (bytes == null || w <= 0 || h <= 0) return;
+		if (bytesPerRow <= 0) bytesPerRow = w * 4;
+		var origin = new GpuOrigin3D();
+		origin.x(x);
+		origin.y(y);
+		var destination = new GpuTexelCopyTextureInfo(gpuTexture);
+		destination.origin(origin);
+		var layout = new GpuTexelCopyBufferLayout();
+		layout.bytesPerRow(bytesPerRow);
+		layout.rowsPerImage(h);
+		var extent = new GpuExtent3D(w);
+		extent.height(h);
+		context.wgpu.queue.writeTextureWith(destination, bytes, layout, extent);
+	}
+
+	public function resize(newWidth:Int, newHeight:Int):Void {
+		newWidth = Std.int(Math.max(1, newWidth));
+		newHeight = Std.int(Math.max(1, newHeight));
+		if (newWidth == width && newHeight == height) return;
+		if (view.valid()) view.destroy();
+		if (gpuTexture.valid()) gpuTexture.destroy();
+		this.width = newWidth;
+		this.height = newHeight;
+		var extent = new GpuExtent3D(this.width);
+		extent.height(this.height);
+		this.gpuTexture = context.wgpu.device.texture(new GpuTextureDescriptor(
+			extent,
+			format,
+			TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC
+		));
+		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
 	}
 
 	public function uploadFromUInt8Array(data:UInt8Array):Void {
