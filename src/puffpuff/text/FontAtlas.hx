@@ -278,7 +278,8 @@ class FontAtlas {
 			weight: style.weight,
 			italic: style.italic,
 			letterSpacing: style.letterSpacing,
-			lineHeight: style.lineHeight
+			lineHeight: style.lineHeight,
+			pixel: style.pixel
 		} : {size: size};
 
 		var run = prepare(text, s);
@@ -293,16 +294,20 @@ class FontAtlas {
 		var invH = 1.0 / texture.height;
 		var colorInvW = colorTexture != null ? 1.0 / colorTexture.width : invW;
 		var colorInvH = colorTexture != null ? 1.0 / colorTexture.height : invH;
+		var pixelSnap = s.pixel == true;
+		var effectiveAlpha = pixelSnap ? -Math.abs(alpha) : alpha;
 
 		for (g in run.glyphs) {
 			if (g.width <= 0 || g.height <= 0) continue;
 			var iw = g.isColor ? colorInvW : invW;
 			var ih = g.isColor ? colorInvH : invH;
+			var gx = pixelSnap ? Math.round(x + g.x) : x + g.x;
+			var gy = pixelSnap ? Math.round(y + g.y) : y + g.y;
 			batcher.addQuad(
 				g.width, 0.0, 0.0, g.height,
-				x + g.x, y + g.y,
+				gx, gy,
 				g.u0 * iw, g.v0 * ih, (g.u1 - g.u0) * iw, (g.v1 - g.v0) * ih,
-				alpha, g.isColor ? 0xFFFFFF : color
+				effectiveAlpha, g.isColor ? 0xFFFFFF : color
 			);
 		}
 	}

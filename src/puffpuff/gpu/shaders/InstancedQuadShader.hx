@@ -18,6 +18,7 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 		@param var instances:StorageBuffer<Vec4>;
 		var vUv:Vec2;
 		var vColor:Vec4;
+		var vPixel:Float;
 
 		function vertex() {
 			// 6 vertices (2 triangles) per quad: (0,0), (1,0), (0,1), (0,1), (1,0), (1,1)
@@ -37,22 +38,34 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 			);
 			vUv = vec2(posUv.z + corner.x * uvCol.x, posUv.w + corner.y * uvCol.y);
 
+			var rawAlpha = uvCol.z;
+			vPixel = 0.0;
+			if (rawAlpha < 0.0) {
+				vPixel = 1.0;
+				rawAlpha = -rawAlpha;
+			}
+
 			var rgb = uvCol.w;
 			if (rgb <= 0.0) {
-				vColor = vec4(1.0, 1.0, 1.0, uvCol.z);
+				vColor = vec4(1.0, 1.0, 1.0, rawAlpha);
 			} else {
 				var r = floor(rgb / 65536.0);
 				var rem = rgb - r * 65536.0;
 				var g = floor(rem / 256.0);
 				var b = rem - g * 256.0;
-				vColor = vec4(r / 255.0, g / 255.0, b / 255.0, uvCol.z);
+				vColor = vec4(r / 255.0, g / 255.0, b / 255.0, rawAlpha);
 			}
 
 			output.position = vec4(worldPos, 0.0, 1.0) * projection;
 		}
 
 		function fragment() {
-			output.color = texture(bitmap, vUv) * vColor;
+			var tex = texture(bitmap, vUv);
+			if (vPixel > 0.5) {
+				if (tex.a < 0.45) discard;
+				tex.a = 1.0;
+			}
+			output.color = tex * vColor;
 		}
 	};
 }

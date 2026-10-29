@@ -93,6 +93,16 @@ class Phase1SmokeTest extends Application {
 		var outline = font.getOutline("PuffPuff", 24.0);
 		if (outline == null || outline.commands.length == 0) throw 'Font getOutline test failed';
 
+		var ttfFixture = "../blinc_abi/fixtures/font-face/regular.ttf";
+		if (sys.FileSystem.exists(ttfFixture)) {
+			var rawTtf = Font.fromFile(ttfFixture, true);
+			if (rawTtf.name != "Blinc Embedded Fixture" || !rawTtf.pixelMode || rawTtf.unitsPerEM <= 0) {
+				throw 'Raw TTF table parsing failed: name=${rawTtf.name}, upem=${rawTtf.unitsPerEM}';
+			}
+			var ttfMeasure = rawTtf.measureText("MIM", 20.0);
+			if (ttfMeasure.width <= 0) throw 'Raw TTF shaping failed';
+		}
+
 		// 6. Test Window + WgpuContext + Application render loop (3 frames)
 		var app = new Phase1SmokeTest();
 		app.create({

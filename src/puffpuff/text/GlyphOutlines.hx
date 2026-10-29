@@ -9,7 +9,8 @@ typedef TextStyle = {
 	?weight:Int,
 	?italic:Bool,
 	?letterSpacing:Float,
-	?lineHeight:Float
+	?lineHeight:Float,
+	?pixel:Bool
 }
 
 typedef TextOutline = {
@@ -84,3 +85,4 @@ class GlyphOutlines {
 		#end
 	}
 }
+
