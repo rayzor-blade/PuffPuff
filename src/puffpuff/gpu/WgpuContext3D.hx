@@ -17,6 +17,10 @@ import gpu.GpuDevice;
 import gpu.GpuExtent3D;
 import gpu.GpuOrigin3D;
 import gpu.GpuPipeline;
+import gpu.GpuRenderPassColorAttachment;
+import gpu.GpuRenderPassDescriptor;
+import gpu.LoadOp;
+import gpu.StoreOp;
 import gpu.GpuSampler;
 import gpu.GpuSamplerDescriptor;
 import gpu.GpuShader;
@@ -384,14 +388,18 @@ class WgpuContext3D {
 		var view = renderTarget != null ? renderTarget.view : wgpu.currentView;
 		if (enc == null || view == null) return;
 
-		enc.passReset();
 		if (clearR != null) {
+			enc.passReset();
 			enc.passColour(view, clearR, clearG, clearB, clearA);
+			enc.passBegin();
 		} else {
-			// Load existing contents of the render target (`NaN` clear in hlwgpu loads instead of clearing, or we clear at start)
-			enc.passColour(view, Math.NaN, 0, 0, 0);
+			// `passColour` always clears; keeping prior contents needs an explicit `LoadOp.Load` attachment.
+			var attachment = new GpuRenderPassColorAttachment(LoadOp.Load, StoreOp.Store);
+			attachment.viewTextureView(view);
+			var desc = new GpuRenderPassDescriptor();
+			desc.addColorAttachments(attachment);
+			enc.beginRenderPass(desc);
 		}
-		enc.passBegin();
 		enc.renderSetViewport(0, 0, targetWidth(), targetHeight(), 0.0, 1.0);
 		passActive = true;
 	}

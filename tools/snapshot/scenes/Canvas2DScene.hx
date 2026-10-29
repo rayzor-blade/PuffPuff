@@ -134,7 +134,7 @@ class Canvas2DScene {
 
 			// SVG heart ×3 at the same scale: 3rd draw replays cached triangles shifted.
 			for (i in 0...3)
-				cv.fill(heart, Paint.solid(0xF43F5E), NonZero, new Affine(3.2, 0, 0, 3.2, 300 + i * 0, 0).after(Affine.translation(i * 14, 112)));
+				cv.fill(heart, Paint.solid(0xF43F5E), NonZero, Affine.translation(482, 150 + i * 55).after(Affine.scaling(2.2, 2.2)));
 
 			// Hairlines and a rotated square.
 			for (i in 0...4)
@@ -155,7 +155,7 @@ class Canvas2DScene {
 			quads.addQuad(PW / 2, 0, 0, PH / 2, 540, 300);
 			quads.flush(proj);
 			quads.begin(bloomDst);
-			quads.addQuad(PW, 0, 0, PH, 540, 320 - 0);
+			quads.addQuad(PW / 2, 0, 0, PH / 2, 690, 300);
 			quads.flush(proj);
 
 			var atlas = FontAtlas.getDefault(c3);
@@ -167,9 +167,11 @@ class Canvas2DScene {
 			arimo.drawText(text, "GAUSSIAN BLUR (σ=6, TAP-PAIRED)", 540, 14, 13.0, 0x38BDF8, 1.0, {weight: 700});
 			arimo.drawText(text, "source", 540, 146, 12.0, 0x94A3B8);
 			arimo.drawText(text, "blurred", 690, 146, 12.0, 0x94A3B8);
+			arimo.drawText(text, "source", 540, 406, 12.0, 0x94A3B8);
+			arimo.drawText(text, "bloomed", 690, 406, 12.0, 0x94A3B8);
 			arimo.drawText(text, "DUAL-KAWASE BLOOM", 540, 274, 13.0, 0x38BDF8, 1.0, {weight: 700});
 			var hit = cv.hitTest(380, 105);
-			arimo.drawText(text, 'draws=${cv.drawCount} verts=${cv.vertexCount} reused=${cv.reused} hit(380,105)=${hit}', 455, 290, 11.0, 0x64748B);
+			arimo.drawText(text, 'draws=${cv.drawCount} verts=${cv.vertexCount} reused=${cv.reused} hit(380,105)=${hit}', 540, 470, 11.0, 0x64748B);
 			text.flush(proj);
 
 			c3.endRenderPass();
