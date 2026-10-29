@@ -1,6 +1,8 @@
 MIT License
 
 Copyright (c) 2026 Rayzor Tech
+Portions of the `lime.*` compatibility API and pure-Haxe math/utility structures:
+Copyright (c) 2013-2026 OpenFL Contributors (https://github.com/openfl/lime)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
