@@ -26,3 +26,4 @@ class Touch {
 		this.device = device;
 	}
 }
+

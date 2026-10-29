@@ -5,7 +5,7 @@ package puffpuff.gpu.shaders;
  * Each instance reads 3 Vec4 rows from `instances`:
  * - row 0: `[a, b, c, d]` (2x2 affine transform)
  * - row 1: `[tx, ty, uvX, uvY]` (translation + top-left UV)
- * - row 2: `[uvW, uvH, alpha, tintPacked]` (UV size + alpha + RGBA multiplier)
+ * - row 2: `[uvW, uvH, alpha, tintRgb24]` (UV size + alpha + 24-bit RGB tint as float)
  */
 class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 	static var SRC = {
@@ -36,7 +36,18 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 				xform.y * corner.x + xform.w * corner.y + posUv.y
 			);
 			vUv = vec2(posUv.z + corner.x * uvCol.x, posUv.w + corner.y * uvCol.y);
-			vColor = vec4(1.0, 1.0, 1.0, uvCol.z);
+
+			var rgb = uvCol.w;
+			if (rgb <= 0.0) {
+				vColor = vec4(1.0, 1.0, 1.0, uvCol.z);
+			} else {
+				var r = floor(rgb / 65536.0);
+				var rem = rgb - r * 65536.0;
+				var g = floor(rem / 256.0);
+				var b = rem - g * 256.0;
+				vColor = vec4(r / 255.0, g / 255.0, b / 255.0, uvCol.z);
+			}
+
 			output.position = vec4(worldPos, 0.0, 1.0) * projection;
 		}
 
@@ -45,4 +56,5 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 		}
 	};
 }
+
 

@@ -52,3 +52,4 @@ abstract Int16Array(ArrayBufferView) from ArrayBufferView to ArrayBufferView {
 	private inline function get_byteOffset():Int return this.byteOffset;
 	private inline function get_length():Int return this.length;
 }
+

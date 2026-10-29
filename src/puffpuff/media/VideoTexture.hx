@@ -79,3 +79,4 @@ class VideoTexture {
 		player.close();
 	}
 }
+

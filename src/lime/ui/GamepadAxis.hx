@@ -30,3 +30,4 @@ enum abstract GamepadAxis(Int) from Int to Int {
 		};
 	}
 }
+

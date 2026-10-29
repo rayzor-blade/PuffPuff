@@ -60,3 +60,4 @@ enum abstract GamepadButton(Int) from Int to Int {
 		};
 	}
 }
+

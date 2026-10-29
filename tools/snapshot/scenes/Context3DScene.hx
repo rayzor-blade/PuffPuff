@@ -5,7 +5,7 @@ import lime.utils.Float32Array;
 import puffpuff.snapshot.Snapshot;
 
 /**
- * Snapshot scene testing Phase 2 WgpuContext3D, PipelineCache, HXSL stock shaders
+ * Snapshot scene testing WgpuContext3D, PipelineCache, HXSL stock shaders
  * (GraphicsShader, DisplayObjectShader, InstancedQuadShader), VertexBuffer3D, IndexBuffer3D, and WgpuTexture.
  */
 class Context3DScene {

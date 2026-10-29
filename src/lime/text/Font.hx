@@ -2,6 +2,8 @@ package lime.text;
 
 import haxe.io.Bytes;
 import lime.app.Future;
+import puffpuff.gpu.WgpuContext3D;
+import puffpuff.text.FontAtlas;
 
 class Font {
 	public var ascender:Int;
@@ -16,6 +18,16 @@ class Font {
 
 	@:noCompletion public var __fontPath:Null<String>;
 	@:noCompletion public var __fontBytes:Null<Bytes>;
+	@:noCompletion public var __atlas:Null<FontAtlas>;
+
+	public function getAtlas(context3D:WgpuContext3D = null):FontAtlas {
+		if (__atlas == null) {
+			__atlas = FontAtlas.getDefault(context3D);
+		} else if (context3D != null && __atlas.texture == null) {
+			__atlas.upload(context3D);
+		}
+		return __atlas;
+	}
 
 	public function new(name:String = null) {
 		this.name = name != null ? name : "Sans";
@@ -51,3 +63,4 @@ class Font {
 		return new Future<Font>(() -> fromFile(path), true);
 	}
 }
+
