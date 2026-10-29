@@ -123,22 +123,33 @@ class Font {
 	public static function fromBytes(bytes:Bytes, pixelMode:Bool = false):Font {
 		if (bytes == null) return null;
 		Fonts.register(bytes);
-		var font = new Font(null, pixelMode);
+		var font = new Font("Arimo", pixelMode);
 		font.__fromBytes(bytes);
 		return font;
 	}
 
 	public static function fromFile(path:String, pixelMode:Bool = false):Font {
 		if (path == null) return null;
+		var resolved = resolvePath(path);
+		if (resolved != null) {
+			var bytes = sys.io.File.getBytes(resolved);
+			var font = fromBytes(bytes, pixelMode);
+			font.__fontPath = resolved;
+			return font;
+		}
 		var fallbackName = haxe.io.Path.withoutDirectory(haxe.io.Path.withoutExtension(path));
 		var font = new Font(fallbackName, pixelMode);
 		font.__fontPath = path;
-		if (sys.FileSystem.exists(path)) {
-			var bytes = sys.io.File.getBytes(path);
-			Fonts.register(bytes);
-			font.__fromBytes(bytes);
-		}
 		return font;
+	}
+
+	static function resolvePath(path:String):Null<String> {
+		if (sys.FileSystem.exists(path)) return path;
+		for (prefix in ["..", "../..", "../../.."]) {
+			var candidate = '$prefix/$path';
+			if (sys.FileSystem.exists(candidate)) return candidate;
+		}
+		return null;
 	}
 
 	public static function loadFromBytes(bytes:Bytes):Future<Font> {

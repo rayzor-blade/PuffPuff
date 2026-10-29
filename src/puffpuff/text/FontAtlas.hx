@@ -301,8 +301,10 @@ class FontAtlas {
 			if (g.width <= 0 || g.height <= 0) continue;
 			var iw = g.isColor ? colorInvW : invW;
 			var ih = g.isColor ? colorInvH : invH;
-			var gx = pixelSnap ? Math.round(x + g.x) : x + g.x;
-			var gy = pixelSnap ? Math.round(y + g.y) : y + g.y;
+			// Whole-pixel placement: subpixel X phase is baked into the glyph bitmap by blinc_abi,
+			// and rounding Y snaps the line baseline so atlas texel rows map 1:1 to screen pixels.
+			var gx = Math.round(x + g.x);
+			var gy = Math.round(y + g.y);
 			batcher.addQuad(
 				g.width, 0.0, 0.0, g.height,
 				gx, gy,
