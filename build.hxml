@@ -1,4 +1,9 @@
+-L hashlink
 -L ash-future
 -L ash-simd
+-L hlwgpu
+-L hlwindow
+-L hlavi
+extraParams.hxml
 
--C ../ashui/haxe
+-cp src

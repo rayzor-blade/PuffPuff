@@ -1,0 +1,19 @@
+{
+  "name": "puffpuff",
+  "url": "https://github.com/rayzor-blade/PuffPuff",
+  "license": "MIT",
+  "tags": ["lime", "openfl", "flixel", "hashlink", "wgpu", "backend", "game"],
+  "description": "Next-generation HashLink & WebGPU backend for OpenFL and HaxeFlixel.",
+  "version": "0.1.0",
+  "classPath": "src",
+  "releasenote": "Initial standalone release decoupled from ashui.",
+  "contributors": ["rayzor", "darmie"],
+  "dependencies": {
+    "hlwindow": "",
+    "hlwgpu": "",
+    "hlavi": "",
+    "ash-future": "",
+    "ash-simd": "",
+    "hashlink": ""
+  }
+}

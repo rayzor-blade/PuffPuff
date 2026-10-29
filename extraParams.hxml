@@ -1,0 +1,5 @@
+-D puffpuff
+-D lime=8.1.2
+-D lime-cffi
+-D native
+-D ash_simd_no_hdll

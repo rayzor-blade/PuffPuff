@@ -1,0 +1,17 @@
+build/
+tools/snapshot/bin/
+.puffpuff/
+*.hl
+*.hdll
+*.dylib
+*.so
+*.dll
+.DS_Store
+tools/snapshot/bin/
+.puffpuff/
+*.hl
+*.hdll
+*.dylib
+*.so
+*.dll
+.DS_Store
