@@ -1,0 +1,4 @@
+-L ash-future
+-L ash-simd
+
+-C ../ashui/haxe
