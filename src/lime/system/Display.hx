@@ -1,21 +1,10 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.system;
 
-class DisplayMode {
-	public var height:Int;
-	public var pixelFormat:Int;
-	public var refreshRate:Int;
-	public var width:Int;
-
-	public function new(width:Int, height:Int, refreshRate:Int, pixelFormat:Int) {
-		this.width = width;
-		this.height = height;
-		this.refreshRate = refreshRate;
-		this.pixelFormat = pixelFormat;
-	}
-}
+import lime.math.Rectangle;
 
 class Display {
-	public var bounds:Dynamic;
+	public var bounds:Rectangle;
 	public var currentMode:DisplayMode;
 	public var dpi:Float;
 	public var id:Int;
@@ -24,6 +13,7 @@ class Display {
 
 	public function new() {
 		dpi = 96.0;
+		bounds = new Rectangle(0, 0, 1920, 1080);
 		supportedModes = [];
 	}
 }

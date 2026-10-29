@@ -1,20 +1,9 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.graphics;
 
 import lime.app.Config;
 import lime.ui.Window;
 import puffpuff.gpu.WgpuContext;
-
-enum abstract RenderContextType(String) from String to String {
-	public var OPENGL = "opengl";
-	public var OPENGLES = "opengles";
-	public var WEBGL = "webgl";
-	public var CAIRO = "cairo";
-	public var CANVAS = "canvas";
-	public var DOM = "dom";
-	public var FLASH = "flash";
-	public var WGPU = "wgpu";
-	public var NONE = "none";
-}
 
 class RenderContext {
 	public var attributes:WindowConfig;

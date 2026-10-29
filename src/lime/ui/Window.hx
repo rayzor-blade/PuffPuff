@@ -1,3 +1,4 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.ui;
 
 import lime.app.Application;
@@ -6,7 +7,7 @@ import lime.app.Event;
 import lime.graphics.Image;
 import lime.graphics.RenderContext;
 import lime.system.Display;
-import lime.system.Display.DisplayMode;
+import lime.system.DisplayMode;
 import puffpuff.gpu.WgpuContext;
 import window.CursorIcon;
 import window.MouseElementState;
@@ -326,7 +327,7 @@ class Window {
 			if (mon.valid()) {
 				disp.name = mon.name();
 				disp.dpi = 96.0 * mon.scaleFactor();
-				disp.currentMode = new DisplayMode(mon.width(), mon.height(), Std.int(mon.refreshRate() / 1000), 0);
+				disp.currentMode = new DisplayMode(mon.width(), mon.height(), Std.int(mon.refreshRate() / 1000), lime.graphics.PixelFormat.RGBA32);
 			}
 		}
 		return disp;

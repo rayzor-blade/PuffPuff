@@ -1,3 +1,4 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.utils;
 
 import haxe.PosInfos;
@@ -9,6 +10,14 @@ enum abstract LogLevel(Int) from Int to Int to UInt {
 	public var INFO = 3;
 	public var DEBUG = 4;
 	public var VERBOSE = 5;
+
+	@:op(A > B) static function gt(a:LogLevel, b:LogLevel):Bool;
+
+	@:op(A >= B) static function gte(a:LogLevel, b:LogLevel):Bool;
+
+	@:op(A < B) static function lt(a:LogLevel, b:LogLevel):Bool;
+
+	@:op(A <= B) static function lte(a:LogLevel, b:LogLevel):Bool;
 }
 
 class Log {

@@ -44,6 +44,7 @@ import puffpuff.gpu.shaders.BitmapFillShader;
 import puffpuff.gpu.shaders.DisplayObjectShader;
 import puffpuff.gpu.shaders.GraphicsShader;
 import puffpuff.gpu.shaders.InstancedQuadShader;
+import puffpuff.gpu.shaders.VectorPathShader;
 
 /**
  * Hardware WebGPU VertexBuffer3D backed by `gpu.GpuBuffer`.
@@ -254,6 +255,11 @@ class WgpuContext3D {
 	private var passActive:Bool = false;
 	private var tempResources:Array<{buffers:Array<GpuBuffer>, bindGroups:Array<GpuBindGroup>}>;
 
+	/** Null = the frame view. Switch only between passes. **/
+	private var renderTarget:Null<WgpuTexture> = null;
+
+	private var lazyShaders:Map<String, GpuShader> = new Map();
+
 	public function new(wgpu:WgpuContext) {
 		this.wgpu = wgpu;
 		var dev = wgpu.device;
@@ -339,10 +345,43 @@ class WgpuContext3D {
 		}
 	}
 
+	/** Redirects subsequent passes into `texture` (needs `RENDER_ATTACHMENT`). Ends any open pass. **/
+	public function setRenderToTexture(texture:WgpuTexture):Void {
+		endRenderPass();
+		renderTarget = texture;
+	}
+
+	public function setRenderToBackBuffer():Void {
+		endRenderPass();
+		renderTarget = null;
+	}
+
+	public inline function targetFormat():TextureFormat {
+		return renderTarget != null ? renderTarget.format : wgpu.surfaceFormat;
+	}
+
+	public inline function targetWidth():Int {
+		return renderTarget != null ? renderTarget.width : wgpu.width;
+	}
+
+	public inline function targetHeight():Int {
+		return renderTarget != null ? renderTarget.height : wgpu.height;
+	}
+
+	/** WGSL modules compiled on first use, so apps that never touch vectors/effects pay nothing. **/
+	public function shader(key:String, wgsl:String):GpuShader {
+		var s = lazyShaders.get(key);
+		if (s == null) {
+			s = wgpu.device.createShader(wgsl);
+			lazyShaders.set(key, s);
+		}
+		return s;
+	}
+
 	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0):Void {
 		if (passActive) return;
 		var enc = wgpu.currentEncoder;
-		var view = wgpu.currentView;
+		var view = renderTarget != null ? renderTarget.view : wgpu.currentView;
 		if (enc == null || view == null) return;
 
 		enc.passReset();
@@ -353,7 +392,7 @@ class WgpuContext3D {
 			enc.passColour(view, Math.NaN, 0, 0, 0);
 		}
 		enc.passBegin();
-		enc.renderSetViewport(0, 0, wgpu.width, wgpu.height, 0.0, 1.0);
+		enc.renderSetViewport(0, 0, targetWidth(), targetHeight(), 0.0, 1.0);
 		passActive = true;
 	}
 
@@ -409,7 +448,7 @@ class WgpuContext3D {
 			shader: shader,
 			vsEntry: "vertex",
 			fsEntry: "fragment",
-			targetFormat: wgpu.surfaceFormat,
+			targetFormat: targetFormat(),
 			blendEnabled: blendEnabled,
 			srcRgb: srcRgb,
 			dstRgb: dstRgb,
@@ -498,7 +537,7 @@ class WgpuContext3D {
 			shader: instancedQuadShader,
 			vsEntry: "vertex",
 			fsEntry: "fragment",
-			targetFormat: wgpu.surfaceFormat,
+			targetFormat: targetFormat(),
 			blendEnabled: blendEnabled,
 			srcRgb: srcRgb,
 			dstRgb: dstRgb,
@@ -549,6 +588,124 @@ class WgpuContext3D {
 		tempResources.push({buffers: [ubo, storageBuf], bindGroups: [bindGroup]});
 	}
 
+	/**
+	 * Draws `vertexCount` vertices of a `puffpuff.canvas.Mesh` layout buffer (32-byte stride:
+	 * `head` vec4 @0, `edges` vec4 @16) with `VectorPathShader`, reading paints from `paints` (storage).
+	 */
+	public function drawVectorMesh(vertices:GpuBuffer, vertexCount:Int, paints:GpuBuffer, matrix:Matrix4, firstVertex:Int = 0):Void {
+		if (vertexCount <= 0) return;
+		var wasPassActive = passActive;
+		if (!wasPassActive) beginRenderPass(null);
+
+		var vs = shader("vectorPath", VectorPathShader.WGSL);
+		var pipeline = pipelineCache.getOrCreate({
+			shader: vs,
+			vsEntry: "vertex",
+			fsEntry: "fragment",
+			targetFormat: targetFormat(),
+			blendEnabled: true,
+			srcRgb: BlendFactor.SrcAlpha,
+			dstRgb: BlendFactor.OneMinusSrcAlpha,
+			opRgb: BlendOperation.Add,
+			srcAlpha: BlendFactor.One,
+			dstAlpha: BlendFactor.OneMinusSrcAlpha,
+			opAlpha: BlendOperation.Add,
+			colorWriteMask: ColorWrite.ALL,
+			depthWrite: false,
+			depthCompare: CompareFunction.Always,
+			depthFormat: null,
+			topology: PrimitiveTopology.TriangleList,
+			cullMode: CullMode.None,
+			frontFace: FrontFace.Ccw,
+			vertexBuffers: [{
+				stride: 32,
+				stepMode: VertexStepMode.Vertex,
+				attributes: [
+					{location: 0, offset: 0, format: VertexFormat.Float32x4},
+					{location: 1, offset: 16, format: VertexFormat.Float32x4}
+				]
+			}]
+		});
+
+		var dev = wgpu.device;
+		var uboSize = VectorPathShader.PARAMS_SIZE;
+		var uboBytes = Bytes.alloc(uboSize);
+		uboBytes.blit(VectorPathShader.PARAMS_matrix, matrix.buffer, matrix.byteOffset, 64);
+		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
+		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
+
+		var bindings = new GpuBindings();
+		bindings.buffer(ubo);
+		bindings.buffer(paints);
+		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
+		bindings.destroy();
+
+		var enc = wgpu.currentEncoder;
+		enc.renderSetPipeline(pipeline);
+		enc.renderSetBindGroup(0, bindGroup);
+		enc.renderSetVertexBuffer(0, vertices);
+		enc.renderDrawRange(vertexCount, 1, firstVertex, 0);
+
+		if (!wasPassActive) endRenderPass();
+		tempResources.push({buffers: [ubo], bindGroups: [bindGroup]});
+	}
+
+	/**
+	 * Full-screen triangle pass of an effect shader declaring `@param effect:Vec4` then `@param source:Sampler2D`,
+	 * into the current target. `additive` blends One/One; otherwise replaces.
+	 */
+	public function drawFullscreen(effectShader:GpuShader, uboSize:Int, effectOffset:Int, source:WgpuTexture, e0:Float, e1:Float, e2:Float, e3:Float,
+			additive:Bool = false):Void {
+		var wasPassActive = passActive;
+		if (!wasPassActive) beginRenderPass(null);
+
+		var pipeline = pipelineCache.getOrCreate({
+			shader: effectShader,
+			vsEntry: "vertex",
+			fsEntry: "fragment",
+			targetFormat: targetFormat(),
+			blendEnabled: additive,
+			srcRgb: BlendFactor.One,
+			dstRgb: additive ? BlendFactor.One : BlendFactor.Zero,
+			opRgb: BlendOperation.Add,
+			srcAlpha: BlendFactor.One,
+			dstAlpha: additive ? BlendFactor.One : BlendFactor.Zero,
+			opAlpha: BlendOperation.Add,
+			colorWriteMask: ColorWrite.ALL,
+			depthWrite: false,
+			depthCompare: CompareFunction.Always,
+			depthFormat: null,
+			topology: PrimitiveTopology.TriangleList,
+			cullMode: CullMode.None,
+			frontFace: FrontFace.Ccw,
+			vertexBuffers: []
+		});
+
+		var dev = wgpu.device;
+		var uboBytes = Bytes.alloc(uboSize);
+		uboBytes.setFloat(effectOffset, e0);
+		uboBytes.setFloat(effectOffset + 4, e1);
+		uboBytes.setFloat(effectOffset + 8, e2);
+		uboBytes.setFloat(effectOffset + 12, e3);
+		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
+		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
+
+		var bindings = new GpuBindings();
+		bindings.buffer(ubo);
+		bindings.texture(source.view);
+		bindings.sampler(linearClampSampler);
+		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
+		bindings.destroy();
+
+		var enc = wgpu.currentEncoder;
+		enc.renderSetPipeline(pipeline);
+		enc.renderSetBindGroup(0, bindGroup);
+		enc.renderDraw(3, 1);
+
+		if (!wasPassActive) endRenderPass();
+		tempResources.push({buffers: [ubo], bindGroups: [bindGroup]});
+	}
+
 	public function flushTempResources():Void {
 		for (res in tempResources) {
 			for (bg in res.bindGroups) {
@@ -569,6 +726,8 @@ class WgpuContext3D {
 		if (bitmapFillShader.valid()) bitmapFillShader.destroy();
 		if (alphaMaskShader.valid()) alphaMaskShader.destroy();
 		if (instancedQuadShader.valid()) instancedQuadShader.destroy();
+		for (s in lazyShaders) if (s.valid()) s.destroy();
+		lazyShaders.clear();
 		if (linearClampSampler.valid()) linearClampSampler.destroy();
 		if (nearestClampSampler.valid()) nearestClampSampler.destroy();
 		if (linearRepeatSampler.valid()) linearRepeatSampler.destroy();

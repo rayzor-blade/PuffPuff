@@ -1,7 +1,8 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.system;
 
 import haxe.Timer;
-import lime.system.Display.DisplayMode;
+import lime.graphics.PixelFormat;
 
 class System {
 	private static var __startTime:Float = Timer.stamp();
@@ -34,8 +35,22 @@ class System {
 		var display = new Display();
 		display.id = id;
 		display.name = "Display " + id;
-		display.currentMode = new DisplayMode(1920, 1080, 60, 0);
+		display.currentMode = new DisplayMode(1920, 1080, 60, PixelFormat.RGBA32);
 		return display;
+	}
+
+	public static function openFile(path:String):Void {
+		if (path == null || path == "") return;
+		switch (Sys.systemName()) {
+			case "Mac": Sys.command("open", [path]);
+			case "Linux": Sys.command("xdg-open", [path]);
+			case "Windows": Sys.command("start", ["", path]);
+			default:
+		}
+	}
+
+	public static function openURL(url:String, target:String = "_blank"):Void {
+		openFile(url);
 	}
 
 	private static function get_allowScreenTimeout():Bool return true;
@@ -53,9 +68,4 @@ class System {
 	private static function get_platformName():String return Sys.systemName();
 	private static function get_platformVersion():String return "";
 	private static function get_userDirectory():String return Sys.getEnv("HOME") != null ? Sys.getEnv("HOME") : Sys.getCwd();
-}
-
-enum Endian {
-	BIG_ENDIAN;
-	LITTLE_ENDIAN;
 }

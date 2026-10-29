@@ -1,3 +1,4 @@
+// Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.utils;
 
 import haxe.io.Bytes;
@@ -7,42 +8,6 @@ import lime.graphics.Image;
 import lime.media.AudioBuffer;
 import lime.text.Font;
 
-enum abstract AssetType(String) from String to String {
-	public var BINARY = "BINARY";
-	public var FONT = "FONT";
-	public var IMAGE = "IMAGE";
-	public var MUSIC = "MUSIC";
-	public var SOUND = "SOUND";
-	public var TEMPLATE = "TEMPLATE";
-	public var TEXT = "TEXT";
-}
-
-class AssetCache {
-	public var audio:Map<String, AudioBuffer>;
-	public var enabled:Bool = true;
-	public var font:Map<String, Font>;
-	public var image:Map<String, Image>;
-	public var version:Int = 1;
-
-	public function new() {
-		audio = new Map<String, AudioBuffer>();
-		font = new Map<String, Font>();
-		image = new Map<String, Image>();
-	}
-
-	public function clear(prefix:String = null):Void {
-		if (prefix == null) {
-			audio.clear();
-			font.clear();
-			image.clear();
-		} else {
-			for (k in audio.keys()) if (StringTools.startsWith(k, prefix)) audio.remove(k);
-			for (k in font.keys()) if (StringTools.startsWith(k, prefix)) font.remove(k);
-			for (k in image.keys()) if (StringTools.startsWith(k, prefix)) image.remove(k);
-		}
-	}
-}
-
 /**
  * Lime Assets facade backed by `ash-future`, `hlavi`, and `puffpuff.snapshot.Png`.
  */
@@ -51,30 +16,92 @@ class Assets {
 	public static var onChange = new Event<Void->Void>();
 
 	private static var __assetPaths:Map<String, String> = new Map<String, String>();
+	private static var __assetTypes:Map<String, AssetType> = new Map<String, AssetType>();
+	private static var __libraries:Map<String, AssetLibrary> = new Map<String, AssetLibrary>();
 
-	public static function registerPath(id:String, path:String):Void {
+	public static function registerPath(id:String, path:String, type:AssetType = null):Void {
 		__assetPaths.set(id, path);
+		if (type != null) __assetTypes.set(id, type);
+	}
+
+	public static function registerLibrary(name:String, library:AssetLibrary):Void {
+		if (name == null || name == "") name = "default";
+		__libraries.set(name, library);
+	}
+
+	public static function getLibrary(name:String):AssetLibrary {
+		if (name == null || name == "") name = "default";
+		return __libraries.get(name);
+	}
+
+	public static function loadLibrary(name:String):Future<AssetLibrary> {
+		var lib = getLibrary(name);
+		if (lib != null) return lib.load();
+		return Future.withValue(new AssetLibrary());
+	}
+
+	public static function unloadLibrary(name:String):Void {
+		if (name == null || name == "") name = "default";
+		var lib = __libraries.get(name);
+		if (lib != null) {
+			lib.unload();
+			__libraries.remove(name);
+		}
+	}
+
+	public static function getPath(id:String):String {
+		return resolvePath(id);
+	}
+
+	public static function isLocal(id:String, type:AssetType = null, useCache:Bool = true):Bool {
+		return true;
+	}
+
+	public static function list(type:AssetType = null):Array<String> {
+		var items:Array<String> = [];
+		for (id in __assetPaths.keys()) {
+			if (type == null || __assetTypes.get(id) == type) {
+				items.push(id);
+			}
+		}
+		for (lib in __libraries) {
+			for (id in lib.list(type)) {
+				if (items.indexOf(id) < 0) items.push(id);
+			}
+		}
+		return items;
 	}
 
 	private static function resolvePath(id:String):String {
 		if (__assetPaths.exists(id)) return __assetPaths.get(id);
+		var colon = id != null ? id.indexOf(":") : -1;
+		if (colon > 0) {
+			var libName = id.substr(0, colon);
+			var sym = id.substr(colon + 1);
+			var lib = __libraries.get(libName);
+			if (lib != null) return lib.getPath(sym);
+		}
+		var defaultLib = __libraries.get("default");
+		if (defaultLib != null && defaultLib.exists(id, null)) {
+			return defaultLib.getPath(id);
+		}
 		return id;
 	}
 
 	public static function exists(id:String, type:AssetType = null):Bool {
 		var path = resolvePath(id);
-		return sys.FileSystem.exists(path);
+		return path != null && sys.FileSystem.exists(path);
 	}
 
 	public static function getBytes(id:String):Bytes {
 		var path = resolvePath(id);
-		if (!sys.FileSystem.exists(path)) return null;
+		if (path == null || !sys.FileSystem.exists(path)) return null;
 		return sys.io.File.getBytes(path);
 	}
 
 	public static function getText(id:String):String {
 		var path = resolvePath(id);
-		if (!sys.FileSystem.exists(path)) return null;
+		if (path == null || !sys.FileSystem.exists(path)) return null;
 		return sys.io.File.getContent(path);
 	}
 
@@ -155,4 +182,3 @@ class Assets {
 		});
 	}
 }
-

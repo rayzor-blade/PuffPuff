@@ -12,7 +12,8 @@ import gpu.TextureFormat;
 import gpu.TextureUsage;
 import haxe.io.Bytes;
 import lime.graphics.Image;
-import lime.graphics.Image.ImageBuffer;
+import lime.graphics.ImageBuffer;
+import lime.graphics.PixelFormat;
 import lime.graphics.RenderContext;
 import puffpuff.gpu.WgpuContext;
 
@@ -114,7 +115,7 @@ class Offscreen {
 		var pixelWidth = Std.int(Math.max(1, Math.round(width * scale)));
 		var pixelHeight = Std.int(Math.max(1, Math.round(height * scale)));
 		var bytes = renderToRgba8(draw, width, height);
-		return new Image(new ImageBuffer(bytes, pixelWidth, pixelHeight, 32, 0), 0, 0, pixelWidth, pixelHeight);
+		return new Image(new ImageBuffer(bytes, pixelWidth, pixelHeight, 32, PixelFormat.RGBA32), 0, 0, pixelWidth, pixelHeight);
 	}
 
 	/**
