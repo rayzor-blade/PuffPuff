@@ -1,0 +1,168 @@
+{
+ "meta": {
+  "ash": "ash 0.1.12",
+  "commit": "0f2c2e0",
+  "cpu": "Apple M1 Pro",
+  "machine": "Darwin-arm64",
+  "mode": "llvm",
+  "pass": "merged"
+ },
+ "results": [
+  {
+   "name": "math.matrix4.append",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 8.14012631367048,
+   "medianNs": 8.21337127081004,
+   "p95Ns": 8.58476549894574,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "math.matrix4.append.scalar",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 41.2027353905769,
+   "medianNs": 41.9641687147484,
+   "p95Ns": 46.8299615885543,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "math.matrix3.concat",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 6.17636056124137,
+   "medianNs": 6.27171778232417,
+   "p95Ns": 6.39685579706821,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "math.vector4.add",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 4.53744039209859,
+   "medianNs": 4.61852320853974,
+   "p95Ns": 4.67981132765742,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "math.float32array.readwrite",
+   "ops": 2048,
+   "samples": 15,
+   "minNs": 2.43507365247099,
+   "medianNs": 2.47221595993313,
+   "p95Ns": 2.50125695202482,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "simd.batch.add.inplace",
+   "ops": 4096,
+   "samples": 15,
+   "minNs": 0.153421102900782,
+   "medianNs": 0.155233763618202,
+   "p95Ns": 0.161436813604299,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "simd.batch.add.scalar",
+   "ops": 4096,
+   "samples": 15,
+   "minNs": 0.626813718148342,
+   "medianNs": 0.636346018679554,
+   "p95Ns": 0.658355392434143,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "canvas2d.build.cold",
+   "ops": 300,
+   "checksum": "3440B075",
+   "samples": 15,
+   "minNs": 6651.02249536759,
+   "medianNs": 10452.5761726575,
+   "p95Ns": 27384.8802615435,
+   "allocBytesPerOp": 16489.1733333333,
+   "leakBytes": 32768
+  },
+  {
+   "name": "canvas2d.build.reused",
+   "ops": 64,
+   "checksum": "036BE1D0",
+   "samples": 15,
+   "minNs": 424.142493758091,
+   "medianNs": 724.723172742267,
+   "p95Ns": 1481.43879202909,
+   "allocBytesPerOp": 71,
+   "leakBytes": 0
+  },
+  {
+   "name": "quadbatcher.addQuad",
+   "ops": 10000,
+   "checksum": "5C5CA3C9",
+   "samples": 15,
+   "minNs": 5.31170517206192,
+   "medianNs": 7.16522336006165,
+   "p95Ns": 25.7726758718491,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "mesh.appendTranslated",
+   "ops": 3000,
+   "checksum": "3EB366F5",
+   "samples": 15,
+   "minNs": 2.07365323189501,
+   "medianNs": 4.48645350960595,
+   "p95Ns": 20.3769506981509,
+   "allocBytesPerOp": 0,
+   "leakBytes": 32768
+  },
+  {
+   "name": "gpu.frame.vectors.submit",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 828316.337183902,
+   "medianNs": 1759547.93628893,
+   "p95Ns": 3302235.35236559,
+   "allocBytesPerOp": 40224,
+   "leakBytes": 0
+  },
+  {
+   "name": "gpu.frame.vectors.readback",
+   "ops": 1,
+   "checksum": "F8348391",
+   "samples": 15,
+   "minNs": 2664312.72029877,
+   "medianNs": 3608629.10747528,
+   "p95Ns": 9316802.02484131,
+   "allocBytesPerOp": 2137568,
+   "leakBytes": -32768
+  },
+  {
+   "name": "gpu.frame.sprites.submit",
+   "ops": 1,
+   "samples": 15,
+   "minNs": 272328.323788113,
+   "medianNs": 364116.827646891,
+   "p95Ns": 570110.479990641,
+   "allocBytesPerOp": 3152,
+   "leakBytes": -32768
+  },
+  {
+   "name": "gpu.frame.sprites.readback",
+   "ops": 1,
+   "checksum": "59F5B8C5",
+   "samples": 15,
+   "minNs": 1270044.93366588,
+   "medianNs": 1667499.54223633,
+   "p95Ns": 5915316.66842374,
+   "allocBytesPerOp": 2100496,
+   "leakBytes": 0
+  }
+ ]
+}
