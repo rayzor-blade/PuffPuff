@@ -20,8 +20,8 @@ import puffpuff.text.FontAtlas;
 
 private enum LabelMode {
 	Cached;
-	Composed;
-	Native;
+	Fresh;
+	Whole;
 }
 
 /** Every benchmark case. Names are `area.subject[.variant]`, and the area is the filter prefix. **/
@@ -505,19 +505,27 @@ class Cases {
 	static function label(n:Int):String
 		return "Label " + n + ": the quick brown fox";
 
-	/** Text shaping and the screen of 200 labels that OpenFL's text benchmark draws; `ops` is paragraphs or labels. **/
+	/**
+		Text shaping and the screen of 200 labels that OpenFL's text benchmark draws. `ops` is paragraphs or labels. The
+		`.whole` cases shape every line whole instead of from words shaped once. They are the reference the default is checked
+		against, and show what it saves.
+	**/
 	static function text():Array<BenchCase> {
 		var atlas = FontAtlas.getDefault();
 		var style = {size: 14.0, family: "Arimo"};
+		function whole(f:Void->Void):Void {
+			FontAtlas.wordCache(false);
+			f();
+			FontAtlas.wordCache(true);
+		}
 		function agrees(text:String):Null<String> {
-			atlas.composeRuns = false;
-			var native = atlas.prepare(text, style);
-			atlas.composeRuns = true;
+			var reference:puffpuff.text.FontAtlas.PreparedRun = null;
+			whole(() -> reference = atlas.prepare(text, style));
 			var composed = atlas.prepare(text, style);
-			if (native.glyphs.length != composed.glyphs.length) return 'composed ${composed.glyphs.length} glyphs, native ${native.glyphs.length}';
-			if (Math.abs(native.width - composed.width) > 0.05) return 'composed width ${composed.width}, native ${native.width}';
-			for (i in 0...native.glyphs.length)
-				if (Math.abs(native.glyphs[i].x - composed.glyphs[i].x) > 1.0) return 'glyph $i is ${composed.glyphs[i].x}, native ${native.glyphs[i].x}';
+			if (reference.glyphs.length != composed.glyphs.length) return 'words give ${composed.glyphs.length} glyphs, whole lines ${reference.glyphs.length}';
+			if (Math.abs(reference.width - composed.width) > 0.05) return 'words give width ${composed.width}, whole lines ${reference.width}';
+			for (i in 0...reference.glyphs.length)
+				if (Math.abs(reference.glyphs[i].x - composed.glyphs[i].x) > 1.0) return 'glyph $i is ${composed.glyphs[i].x}, whole lines ${reference.glyphs[i].x}';
 			return null;
 		}
 		return [
@@ -527,8 +535,8 @@ class Cases {
 				check: () -> agrees(PARAGRAPH + "7")
 			},
 			{
-				name: "text.shape.paragraph.native",
-				run: () -> atlas.prepareNative(PARAGRAPH + (labelCounter++), style)
+				name: "text.shape.paragraph.whole",
+				run: () -> whole(() -> atlas.prepare(PARAGRAPH + (labelCounter++), style))
 			},
 			{
 				name: "text.shape.labels200",
@@ -537,9 +545,9 @@ class Cases {
 				check: () -> agrees(label(7))
 			},
 			{
-				name: "text.shape.labels200.native",
+				name: "text.shape.labels200.whole",
 				ops: LABELS,
-				run: () -> for (i in 0...LABELS) atlas.prepareNative(label(labelCounter++), style)
+				run: () -> whole(() -> for (i in 0...LABELS) atlas.prepare(label(labelCounter++), style))
 			},
 			{
 				name: "text.measure.labels200",
@@ -550,8 +558,8 @@ class Cases {
 	}
 
 	/**
-		200 labels drawn every frame: from runs shaped once (`Cached`), or shaped again each frame as when the text
-		changes, composed from cached characters (`Composed`) or by the native engine alone (`Native`).
+		200 labels drawn every frame, either from runs shaped once (`Cached`) or with new text each frame (`Fresh`). `Fresh`
+		shapes whole lines when `Whole` switches the word cache off.
 	**/
 	static function labelsDraw(mode:LabelMode):Void->(puffpuff.gpu.WgpuContext3D->Void) {
 		return () -> {
@@ -565,7 +573,7 @@ class Cases {
 				if (batcher == null) batcher = new QuadBatcher(c3, 4096);
 				var texture = atlas.upload(c3);
 				batcher.begin(texture);
-				atlas.composeRuns = mode != Native;
+				FontAtlas.wordCache(mode != Whole);
 				for (i in 0...LABELS) {
 					var x = (i % 4) * 128 + 4.0;
 					var y = Std.int(i / 4) * 10 + 14.0;
@@ -580,7 +588,7 @@ class Cases {
 						atlas.drawText(batcher, label(labelCounter++), x, y, 14.0, 0xFFFFFF, 1.0, style);
 					}
 				}
-				atlas.composeRuns = true;
+				FontAtlas.wordCache(true);
 				batcher.flush(proj);
 			};
 		};
@@ -594,10 +602,10 @@ class Cases {
 			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
 			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(Cached)),
 			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(Cached)),
-			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(Composed)),
-			gpuFrame("gpu.frame.text.dynamic.readback", true, labelsDraw(Composed), null, false),
-			gpuFrame("gpu.frame.text.dynamic.native.submit", false, labelsDraw(Native)),
-			gpuFrame("gpu.frame.text.dynamic.native.readback", true, labelsDraw(Native), null, false)
+			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(Fresh)),
+			gpuFrame("gpu.frame.text.dynamic.readback", true, labelsDraw(Fresh), null, false),
+			gpuFrame("gpu.frame.text.dynamic.whole.submit", false, labelsDraw(Whole)),
+			gpuFrame("gpu.frame.text.dynamic.whole.readback", true, labelsDraw(Whole), null, false)
 		];
 	}
 }

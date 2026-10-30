@@ -36,20 +36,26 @@ class FontAtlas {
 	public var texture(default, null):Null<WgpuTexture>;
 	public var colorTexture(default, null):Null<WgpuTexture>;
 	public var revision(default, null):Int = 0;
+	public var colorRevision(default, null):Int = 0;
 
 	/** How many times the native atlases were cleared. Glyph rectangles from before a clear are stale. **/
 	public var generation(get, never):Int;
-	public var colorRevision(default, null):Int = 0;
-
-	/** Lays out plain ASCII lines from cached per-character data; off, every string goes to the shaper. **/
-	public var composeRuns = true;
-
-	final composer:RunComposer;
 
 	static var __defaultAtlas:Null<FontAtlas>;
 	static var __gammaLut:Null<Bytes>;
 
 	final info:Bytes = Bytes.alloc(28);
+
+	// Buffers `shape` fills, kept between calls.
+	#if hl
+	var shapeOut:hl.Bytes = new hl.Bytes(9 * 4 * 256);
+	var shapeCapacity = 256 * 9;
+	final shapeInfo:hl.Bytes = new hl.Bytes(16);
+	final shapeStyle:hl.Bytes = new hl.Bytes(24);
+	var familyName:Null<String>;
+	var familyBytes:Null<hl.Bytes>;
+	#end
+
 	var rawPixels:Bytes = Bytes.alloc(0);
 	var rgbaPixels:Bytes = Bytes.alloc(0);
 	var seen:Int = 0;
@@ -60,6 +66,18 @@ class FontAtlas {
 		return TextNative.blinc_text_generation();
 		#else
 		return 0;
+		#end
+	}
+
+	/**
+	 * Whether lines are composed from words shaped once (the default) or shaped whole each time. Both place glyphs within a
+	 * third of a pixel. Whole lines exist so tests can compare. Returns the previous setting.
+	 */
+	public static function wordCache(enabled:Bool):Bool {
+		#if hl
+		return TextNative.blinc_text_word_cache(enabled ? 1 : 0) != 0;
+		#else
+		return true;
 		#end
 	}
 
@@ -86,7 +104,6 @@ class FontAtlas {
 
 	public function new() {
 		Fonts.ensureBundled();
-		composer = new RunComposer(this);
 	}
 
 	public function upload(context3D:WgpuContext3D):WgpuTexture {
@@ -175,32 +192,56 @@ class FontAtlas {
 		#end
 	}
 
+	#if hl
+	/**
+	 * Shapes `text` into `shapeOut` and the line metrics into `shapeInfo`. Returns how many f32s were written
+	 * (`glyphs * 9`).
+	 */
+	function shape(text:String, size:Float, style:Null<TextStyle>):Int {
+		Fonts.ensureBundled();
+		var family:Null<String> = null;
+		var weight = 400;
+		var italic = false;
+		var generic = 0;
+		var spacing = 0.0;
+		var leading = 0.0;
+		if (style != null) {
+			if (style.size != null) size = style.size;
+			family = style.family;
+			if (style.weight != null) weight = style.weight;
+			italic = style.italic == true;
+			if (style.generic != null) generic = style.generic;
+			if (style.letterSpacing != null) spacing = style.letterSpacing;
+			if (style.lineHeight != null) leading = style.lineHeight;
+		}
+		if (family != familyName) {
+			familyName = family;
+			familyBytes = family == null ? null : TextUtf8.encode(family);
+		}
+		shapeStyle.setF32(0, generic * 1.0);
+		shapeStyle.setF32(4, weight * 1.0);
+		shapeStyle.setF32(8, italic ? 1.0 : 0.0);
+		shapeStyle.setF32(12, size);
+		shapeStyle.setF32(16, spacing);
+		shapeStyle.setF32(20, leading);
+
+		var textBytes = TextUtf8.encode(text);
+		var n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+		if (n > shapeCapacity) {
+			shapeCapacity = n + (n >> 1);
+			shapeOut = new hl.Bytes(shapeCapacity * 4);
+			n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+		}
+		return n;
+	}
+	#end
+
 	/**
 	 * Shapes `text` and rasterizes its glyphs into the native atlas, returning glyph positions,
 	 * atlas pixel rects, and line metrics.
 	 */
 	public function prepare(text:String, ?style:TextStyle):PreparedRun {
-		if (composeRuns && text != null && text.length > 0) {
-			var slot = composer.slotFor(16.0, style);
-			if (composer.compose(slot, text))
-				return composer.run(slot, text);
-		}
-		return prepareNative(text, style);
-	}
-
-	/**
-	 * Shapes `text` with the native engine, whatever it is: what `prepare` falls back to.
-	 */
-	public function prepareNative(text:String, ?style:TextStyle):PreparedRun {
-		Fonts.ensureBundled();
-		var s:TextStyle = style != null ? style : {};
-		var size:Float = s.size != null ? s.size : 16.0;
-		var weight:Int = s.weight != null ? s.weight : 400;
-		var italic = s.italic == true;
-		var generic:Int = s.generic != null ? s.generic : 0;
-		var spacing:Float = s.letterSpacing != null ? s.letterSpacing : 0.0;
-		var leading:Float = s.lineHeight != null ? s.lineHeight : 0.0;
-
+		var size:Float = style != null && style.size != null ? style.size : 16.0;
 		if (text == null || text.length == 0) {
 			return {
 				glyphs: [],
@@ -212,49 +253,30 @@ class FontAtlas {
 		}
 
 		#if hl
-		var runInfo = new hl.Bytes(16);
-		var fontBytes = s.family == null ? null : TextUtf8.encode(s.family);
-		var textBytes = TextUtf8.encode(text);
-		var capacity = (text.length + 8) * 9;
-		var out = new hl.Bytes(capacity * 4);
-		var set = new hl.Bytes(24);
-		set.setF32(0, generic * 1.0);
-		set.setF32(4, weight * 1.0);
-		set.setF32(8, italic ? 1.0 : 0.0);
-		set.setF32(12, size);
-		set.setF32(16, spacing);
-		set.setF32(20, leading);
-
-		var n = TextNative.blinc_text_prepare(textBytes, fontBytes, set, out, capacity, runInfo);
-		if (n > capacity) {
-			capacity = n;
-			out = new hl.Bytes(capacity * 4);
-			n = TextNative.blinc_text_prepare(textBytes, fontBytes, set, out, capacity, runInfo);
-		}
-
+		var n = shape(text, size, style);
 		var count = Std.int(n / 9);
 		var glyphs:Array<PreparedGlyph> = [];
 		for (i in 0...count) {
 			var base = i * 36;
 			glyphs.push({
-				x: out.getF32(base),
-				y: out.getF32(base + 4),
-				width: out.getF32(base + 8),
-				height: out.getF32(base + 12),
-				u0: out.getF32(base + 16),
-				v0: out.getF32(base + 20),
-				u1: out.getF32(base + 24),
-				v1: out.getF32(base + 28),
-				isColor: out.getF32(base + 32) > 0.5
+				x: shapeOut.getF32(base),
+				y: shapeOut.getF32(base + 4),
+				width: shapeOut.getF32(base + 8),
+				height: shapeOut.getF32(base + 12),
+				u0: shapeOut.getF32(base + 16),
+				v0: shapeOut.getF32(base + 20),
+				u1: shapeOut.getF32(base + 24),
+				v1: shapeOut.getF32(base + 28),
+				isColor: shapeOut.getF32(base + 32) > 0.5
 			});
 		}
 
 		return {
 			glyphs: glyphs,
-			width: runInfo.getF32(0),
-			ascent: runInfo.getF32(4),
-			descent: runInfo.getF32(8),
-			lineHeight: runInfo.getF32(12)
+			width: shapeInfo.getF32(0),
+			ascent: shapeInfo.getF32(4),
+			descent: shapeInfo.getF32(8),
+			lineHeight: shapeInfo.getF32(12)
 		};
 		#else
 		return {
@@ -267,38 +289,19 @@ class FontAtlas {
 		#end
 	}
 
-	/**
-	 * The advance of every character of `text`, kerning folded in, or null when the text is not plain printable ASCII
-	 * that can be laid out from cached data (then use `prepare`).
-	 */
-	public function characterAdvances(text:String, size:Float = 16.0, ?style:TextStyle):Null<Array<Float>> {
-		if (!composeRuns || text == null || text.length == 0) return null;
-		var slot = composer.slotFor(size, style);
-		return composer.compose(slot, text) ? composer.advances(slot, text) : null;
-	}
-
 	public function measureText(text:String, size:Float = 16.0, ?style:TextStyle):{width:Float, ascent:Float, descent:Float, lineHeight:Float} {
-		if (composeRuns && text != null && text.length > 0) {
-			var slot = composer.slotFor(size, style);
-			if (composer.compose(slot, text))
-				return {width: composer.width(slot, text), ascent: slot.ascent, descent: slot.descent, lineHeight: slot.lineHeight};
+		#if hl
+		if (text != null && text.length > 0) {
+			shape(text, size, style);
+			return {
+				width: shapeInfo.getF32(0),
+				ascent: shapeInfo.getF32(4),
+				descent: shapeInfo.getF32(8),
+				lineHeight: shapeInfo.getF32(12)
+			};
 		}
-		var s:TextStyle = style != null ? {
-			size: style.size != null ? style.size : size,
-			family: style.family,
-			generic: style.generic,
-			weight: style.weight,
-			italic: style.italic,
-			letterSpacing: style.letterSpacing,
-			lineHeight: style.lineHeight
-		} : {size: size};
-		var run = prepare(text, s);
-		return {
-			width: run.width,
-			ascent: run.ascent,
-			descent: run.descent,
-			lineHeight: run.lineHeight
-		};
+		#end
+		return {width: 0.0, ascent: size * 0.8, descent: size * 0.2, lineHeight: size * 1.2};
 	}
 
 	/**
@@ -315,29 +318,8 @@ class FontAtlas {
 		?style:TextStyle
 	):Void {
 		if (batcher == null || text == null || text.length == 0) return;
-		if (composeRuns) {
-			var slot = composer.slotFor(size, style);
-			if (composer.compose(slot, text)) {
-				sync(batcher.context3D);
-				if (texture == null) return;
-				if (batcher.texture == null) batcher.begin(texture);
-				var pixel = style != null && style.pixel == true;
-				composer.draw(batcher, slot, text, x, y, color, pixel ? -Math.abs(alpha) : alpha, 1.0 / texture.width, 1.0 / texture.height);
-				return;
-			}
-		}
-		var s:TextStyle = style != null ? {
-			size: style.size != null ? style.size : size,
-			family: style.family,
-			generic: style.generic,
-			weight: style.weight,
-			italic: style.italic,
-			letterSpacing: style.letterSpacing,
-			lineHeight: style.lineHeight,
-			pixel: style.pixel
-		} : {size: size};
-
-		var run = prepare(text, s);
+		#if hl
+		var n = shape(text, size, style);
 		sync(batcher.context3D);
 		if (texture == null) return;
 
@@ -349,23 +331,30 @@ class FontAtlas {
 		var invH = 1.0 / texture.height;
 		var colorInvW = colorTexture != null ? 1.0 / colorTexture.width : invW;
 		var colorInvH = colorTexture != null ? 1.0 / colorTexture.height : invH;
-		var pixelSnap = s.pixel == true;
+		var pixelSnap = style != null && style.pixel == true;
 		var effectiveAlpha = pixelSnap ? -Math.abs(alpha) : alpha;
 
-		for (g in run.glyphs) {
-			if (g.width <= 0 || g.height <= 0) continue;
-			var iw = g.isColor ? colorInvW : invW;
-			var ih = g.isColor ? colorInvH : invH;
+		for (i in 0...Std.int(n / 9)) {
+			var base = i * 36;
+			var width = shapeOut.getF32(base + 8);
+			var height = shapeOut.getF32(base + 12);
+			if (width <= 0 || height <= 0) continue;
+			var isColor = shapeOut.getF32(base + 32) > 0.5;
+			var iw = isColor ? colorInvW : invW;
+			var ih = isColor ? colorInvH : invH;
+			var u0 = shapeOut.getF32(base + 16);
+			var v0 = shapeOut.getF32(base + 20);
 			// Whole-pixel placement: subpixel X phase is baked into the glyph bitmap by blinc_abi,
 			// and rounding Y snaps the line baseline so atlas texel rows map 1:1 to screen pixels.
-			var gx = Math.round(x + g.x);
-			var gy = Math.round(y + g.y);
+			var gx = Math.round(x + shapeOut.getF32(base));
+			var gy = Math.round(y + shapeOut.getF32(base + 4));
 			batcher.addQuad(
-				g.width, 0.0, 0.0, g.height,
+				width, 0.0, 0.0, height,
 				gx, gy,
-				g.u0 * iw, g.v0 * ih, (g.u1 - g.u0) * iw, (g.v1 - g.v0) * ih,
-				effectiveAlpha, g.isColor ? 0xFFFFFF : color
+				u0 * iw, v0 * ih, (shapeOut.getF32(base + 24) - u0) * iw, (shapeOut.getF32(base + 28) - v0) * ih,
+				effectiveAlpha, isColor ? 0xFFFFFF : color
 			);
 		}
+		#end
 	}
 }

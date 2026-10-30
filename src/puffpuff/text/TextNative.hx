@@ -40,6 +40,11 @@ extern class TextNative {
 	 * How many times the glyph atlases were cleared to make room. A glyph rectangle taken before a clear is stale after it.
 	 */
 	static function blinc_text_generation():Int;
+
+	/**
+	 * Whether lines are composed from cached words (1, the default) or shaped whole (0). Returns the previous setting.
+	 */
+	static function blinc_text_word_cache(enabled:Int):Int;
 }
 
 class TextUtf8 {
