@@ -1,66 +1,167 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.utils;
 
-import haxe.io.Bytes;
+#if (js && !doc_gen)
+#if haxe4
+import js.lib.Uint8Array as JSUInt8Array;
+#else
+import js.html.Uint8Array as JSUInt8Array;
+#end
+@:forward
+@:transitive
+abstract UInt8Array(JSUInt8Array) from JSUInt8Array to JSUInt8Array
+{
+	@:to inline function toArrayBufferView():ArrayBufferView
+		return this;
 
-/**
- * Zero-copy UInt8Array backed by `haxe.io.Bytes` / `hl.Bytes`.
- */
-abstract UInt8Array(ArrayBufferView) from ArrayBufferView to ArrayBufferView {
-	public static inline var BYTES_PER_ELEMENT:Int = 1;
+	public inline static var BYTES_PER_ELEMENT:Int = 1;
 
-	public var buffer(get, never):Bytes;
-	public var byteLength(get, never):Int;
-	public var byteOffset(get, never):Int;
-	public var length(get, never):Int;
-
-	public inline function new(elements:Dynamic = null, byteOffset:Int = 0, len:Null<Int> = null) {
-		if (Std.isOfType(elements, Int)) {
-			var count:Int = cast elements;
-			var bytes = Bytes.alloc(count);
-			this = new ArrayBufferView(bytes, 0, count, BYTES_PER_ELEMENT);
-		} else if (Std.isOfType(elements, Bytes)) {
-			var bytes:Bytes = cast elements;
-			var bLen = len != null ? len : bytes.length - byteOffset;
-			this = new ArrayBufferView(bytes, byteOffset, bLen, BYTES_PER_ELEMENT);
-		} else if (Std.isOfType(elements, Array)) {
-			var arr:Array<Int> = cast elements;
-			var count = len != null ? len : arr.length - byteOffset;
-			var bytes = Bytes.alloc(count);
-			for (i in 0...count) {
-				bytes.set(i, arr[byteOffset + i] & 0xFF);
+	@:generic
+	public inline function new<T>(?elements:Int, ?array:Array<T>, #if openfl ?vector:openfl.Vector<Int>, #end ?view:ArrayBufferView, ?buffer:ArrayBuffer,
+			?byteoffset:Int = 0, ?len:Null<Int>)
+	{
+		if (elements != null)
+		{
+			this = new JSUInt8Array(elements);
+		}
+		else if (array != null)
+		{
+			this = new JSUInt8Array(untyped array);
+		#if (openfl && commonjs)
+		}
+		else if (vector != null)
+		{
+			this = new JSUInt8Array(untyped (vector));
+		#elseif openfl
+		}
+		else if (vector != null)
+		{
+			this = new JSUInt8Array(untyped untyped (vector).__array);
+		#end
+		}
+		else if (view != null)
+		{
+			this = new JSUInt8Array(untyped view);
+		}
+		else if (buffer != null)
+		{
+			if (len == null)
+			{
+				this = new JSUInt8Array(buffer, byteoffset);
 			}
-			this = new ArrayBufferView(bytes, 0, count, BYTES_PER_ELEMENT);
-		} else {
-			this = new ArrayBufferView(Bytes.alloc(0), 0, 0, BYTES_PER_ELEMENT);
+			else
+			{
+				this = new JSUInt8Array(buffer, byteoffset, len);
+			}
+		}
+		else
+		{
+			this = null;
 		}
 	}
 
-	@:arrayAccess
-	public inline function get(index:Int):Int {
-		return this.buffer.get(this.byteOffset + index);
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end inline function __set(idx:Int, val:UInt):UInt
+		return this[idx] = val;
+
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end inline function __get(idx:Int):UInt
+		return this[idx];
+
+	// non spec haxe conversions
+	inline public static function fromBytes(bytes:haxe.io.Bytes, ?byteOffset:Int, ?len:Int):UInt8Array
+	{
+		if (byteOffset == null) return new JSUInt8Array(cast bytes.getData());
+		if (len == null) return new JSUInt8Array(cast bytes.getData(), byteOffset);
+		return new JSUInt8Array(cast bytes.getData(), byteOffset, len);
 	}
 
-	@:arrayAccess
-	public inline function set(index:Int, value:Int):Int {
-		var v = value & 0xFF;
-		this.buffer.set(this.byteOffset + index, v);
-		return v;
+	inline public function toBytes():haxe.io.Bytes
+	{
+		return @:privateAccess new haxe.io.Bytes(cast new JSUInt8Array(this.buffer));
 	}
 
-	public static inline function fromBytes(bytes:Bytes, byteOffset:Int = 0, len:Null<Int> = null):UInt8Array {
+	inline function toString()
+		return this != null ? 'UInt8Array [byteLength:${this.byteLength}, length:${this.length}]' : null;
+}
+#else
+import lime.utils.ArrayBufferView;
+
+@:transitive
+@:forward
+abstract UInt8Array(ArrayBufferView) from ArrayBufferView to ArrayBufferView
+{
+	public inline static var BYTES_PER_ELEMENT:Int = 1;
+
+	public var length(get, never):Int;
+
+	#if (haxe_ver < 4.2)
+	@:generic
+	#end
+	public inline function new<T>(?elements:Int, ?buffer:ArrayBuffer, ?array:Array<T>, #if openfl ?vector:openfl.Vector<Int>, #end ?view:ArrayBufferView,
+			?byteoffset:Int = 0, ?len:Null<Int>)
+	{
+		if (elements != null)
+		{
+			this = new ArrayBufferView(elements, Uint8);
+		}
+		else if (array != null)
+		{
+			this = new ArrayBufferView(0, Uint8).initArray(array);
+		#if openfl
+		}
+		else if (vector != null)
+		{
+			this = new ArrayBufferView(0, Uint8).initArray(untyped (vector).__array);
+		#end
+		}
+		else if (view != null)
+		{
+			this = new ArrayBufferView(0, Uint8).initTypedArray(view);
+		}
+		else if (buffer != null)
+		{
+			this = new ArrayBufferView(0, Uint8).initBuffer(buffer, byteoffset, len);
+		}
+		else
+		{
+			throw "Invalid constructor arguments for UInt8Array";
+		}
+	}
+
+	// Public API
+	public inline function subarray(begin:Int, end:Null<Int> = null):UInt8Array
+		return this.subarray(begin, end);
+
+	// non spec haxe conversions
+	inline public static function fromBytes(bytes:haxe.io.Bytes, ?byteOffset:Int = 0, ?len:Int):UInt8Array
+	{
 		return new UInt8Array(bytes, byteOffset, len);
 	}
 
-	public inline function toBytes():Bytes {
-		if (this.byteOffset == 0 && this.byteLength == this.buffer.length) {
-			return this.buffer;
-		}
-		return this.buffer.sub(this.byteOffset, this.byteLength);
+	inline public function toBytes():haxe.io.Bytes
+	{
+		return this.buffer;
 	}
 
-	private inline function get_buffer():Bytes return this.buffer;
-	private inline function get_byteLength():Int return this.byteLength;
-	private inline function get_byteOffset():Int return this.byteOffset;
-	private inline function get_length():Int return this.length;
+	// Internal
+	inline function toString()
+		return this != null ? 'UInt8Array [byteLength:${this.byteLength}, length:${this.length}]' : null;
+
+	inline function get_length()
+		return this.length;
+
+	@:noCompletion
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end
+	public inline function __get(idx:Int)
+	{
+		return ArrayBufferIO.getUint8(this.buffer, this.byteOffset + idx);
+	}
+
+	@:noCompletion
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end
+	public inline function __set(idx:Int, val:UInt)
+	{
+		ArrayBufferIO.setUint8(this.buffer, this.byteOffset + idx, val);
+		return val;
+	}
 }
+#end // !js

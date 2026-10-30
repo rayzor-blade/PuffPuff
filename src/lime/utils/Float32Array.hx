@@ -1,54 +1,171 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.utils;
 
-import haxe.io.Bytes;
+#if (js && !doc_gen)
+#if haxe4
+import js.lib.Float32Array as JSFloat32Array;
+import js.lib.Uint8Array as JSUInt8Array;
+#else
+import js.html.Float32Array as JSFloat32Array;
+import js.html.Uint8Array as JSUInt8Array;
+#end
+@:forward
+@:arrayAccess
+@:transitive
+abstract Float32Array(JSFloat32Array) from JSFloat32Array to JSFloat32Array
+{
+	@:to function toArrayBufferView():ArrayBufferView
+		return this;
 
-/**
- * Zero-copy Float32Array backed by `haxe.io.Bytes` / `hl.Bytes`.
- */
-abstract Float32Array(ArrayBufferView) from ArrayBufferView to ArrayBufferView {
-	public static inline var BYTES_PER_ELEMENT:Int = 4;
+	public inline static var BYTES_PER_ELEMENT:Int = 4;
 
-	public var buffer(get, never):Bytes;
-	public var byteLength(get, never):Int;
-	public var byteOffset(get, never):Int;
-	public var length(get, never):Int;
-
-	public inline function new(elements:Dynamic = null, byteOffset:Int = 0, len:Null<Int> = null) {
-		if (Std.isOfType(elements, Int)) {
-			var count:Int = cast elements;
-			var bytes = Bytes.alloc(count * BYTES_PER_ELEMENT);
-			this = new ArrayBufferView(bytes, 0, bytes.length, BYTES_PER_ELEMENT);
-		} else if (Std.isOfType(elements, Bytes)) {
-			var bytes:Bytes = cast elements;
-			var bLen = len != null ? len * BYTES_PER_ELEMENT : bytes.length - byteOffset;
-			this = new ArrayBufferView(bytes, byteOffset, bLen, BYTES_PER_ELEMENT);
-		} else if (Std.isOfType(elements, Array)) {
-			var arr:Array<Float> = cast elements;
-			var count = len != null ? len : arr.length - byteOffset;
-			var bytes = Bytes.alloc(count * BYTES_PER_ELEMENT);
-			for (i in 0...count) {
-				bytes.setFloat(i * BYTES_PER_ELEMENT, arr[byteOffset + i]);
+	@:generic
+	public inline function new<T>(?elements:Int, ?array:Array<T>, #if openfl ?vector:openfl.Vector<Float>, #end ?view:ArrayBufferView, ?buffer:ArrayBuffer,
+			?byteoffset:Int = 0, ?len:Null<Int>)
+	{
+		if (elements != null)
+		{
+			this = new JSFloat32Array(elements);
+		}
+		else if (array != null)
+		{
+			this = new JSFloat32Array(untyped array);
+		#if (openfl && commonjs)
+		}
+		else if (vector != null)
+		{
+			this = new JSFloat32Array(untyped (vector));
+		#elseif openfl
+		}
+		else if (vector != null)
+		{
+			this = new JSFloat32Array(untyped untyped (vector).__array);
+		#end
+		}
+		else if (view != null)
+		{
+			this = new JSFloat32Array(untyped view);
+		}
+		else if (buffer != null)
+		{
+			if (len == null)
+			{
+				this = new JSFloat32Array(buffer, byteoffset);
 			}
-			this = new ArrayBufferView(bytes, 0, bytes.length, BYTES_PER_ELEMENT);
-		} else {
-			this = new ArrayBufferView(Bytes.alloc(0), 0, 0, BYTES_PER_ELEMENT);
+			else
+			{
+				this = new JSFloat32Array(buffer, byteoffset, len);
+			}
+		}
+		else
+		{
+			this = null;
 		}
 	}
 
-	@:arrayAccess
-	public inline function get(index:Int):Float {
-		return this.buffer.getFloat(this.byteOffset + (index << 2));
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end inline function __set(idx:Int, val:Float):Float
+		return this[idx] = val;
+
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end inline function __get(idx:Int):Float
+		return this[idx];
+
+	// non spec haxe conversions
+	inline public static function fromBytes(bytes:haxe.io.Bytes, ?byteOffset:Int = 0, ?len:Int):Float32Array
+	{
+		if (byteOffset == null) return new JSFloat32Array(cast bytes.getData());
+		if (len == null) return new JSFloat32Array(cast bytes.getData(), byteOffset);
+		return new JSFloat32Array(cast bytes.getData(), byteOffset, len);
 	}
 
-	@:arrayAccess
-	public inline function set(index:Int, value:Float):Float {
-		this.buffer.setFloat(this.byteOffset + (index << 2), value);
-		return value;
+	inline public function toBytes():haxe.io.Bytes
+	{
+		return @:privateAccess new haxe.io.Bytes(cast new JSUInt8Array(this.buffer));
 	}
 
-	private inline function get_buffer():Bytes return this.buffer;
-	private inline function get_byteLength():Int return this.byteLength;
-	private inline function get_byteOffset():Int return this.byteOffset;
-	private inline function get_length():Int return this.length;
+	inline function toString()
+		return this != null ? 'Float32Array [byteLength:${this.byteLength}, length:${this.length}]' : null;
 }
+#else
+import lime.utils.ArrayBuffer;
+import lime.utils.ArrayBufferView;
+
+@:transitive
+@:forward
+abstract Float32Array(ArrayBufferView) from ArrayBufferView to ArrayBufferView
+{
+	public inline static var BYTES_PER_ELEMENT:Int = 4;
+
+	public var length(get, never):Int;
+
+	#if (haxe_ver < 4.2)
+	@:generic
+	#end
+	public inline function new<T>(?elements:Int, ?buffer:ArrayBuffer, ?array:Array<T>, #if openfl ?vector:openfl.Vector<Float>, #end ?view:ArrayBufferView,
+			?byteoffset:Int = 0, ?len:Null<Int>)
+	{
+		if (elements != null)
+		{
+			this = new ArrayBufferView(elements, Float32);
+		}
+		else if (array != null)
+		{
+			this = new ArrayBufferView(0, Float32).initArray(array);
+		#if openfl
+		}
+		else if (vector != null)
+		{
+			this = new ArrayBufferView(0, Float32).initArray(untyped (vector).__array);
+		#end
+		}
+		else if (view != null)
+		{
+			this = new ArrayBufferView(0, Float32).initTypedArray(view);
+		}
+		else if (buffer != null)
+		{
+			this = new ArrayBufferView(0, Float32).initBuffer(buffer, byteoffset, len);
+		}
+		else
+		{
+			throw "Invalid constructor arguments for Float32Array";
+		}
+	}
+
+	// Public API
+	public inline function subarray(begin:Int, end:Null<Int> = null):Float32Array
+		return this.subarray(begin, end);
+
+	// non spec haxe conversions
+	inline public static function fromBytes(bytes:haxe.io.Bytes, ?byteOffset:Int = 0, ?len:Int):Float32Array
+	{
+		return new Float32Array(bytes, byteOffset, len);
+	}
+
+	inline public function toBytes():haxe.io.Bytes
+	{
+		return this.buffer;
+	}
+
+	// Internal
+	inline function toString()
+		return this != null ? 'Float32Array [byteLength:${this.byteLength}, length:${this.length}]' : null;
+
+	#if (haxe_ver >= 4.0) extern #else @:extern #end inline function get_length()
+		return this.length;
+
+	@:noCompletion
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end
+	public inline function __get(idx:Int):Float
+	{
+		return ArrayBufferIO.getFloat32(this.buffer, this.byteOffset + (idx * BYTES_PER_ELEMENT));
+	}
+
+	@:noCompletion
+	@:arrayAccess #if (haxe_ver >= 4.0) extern #else @:extern #end
+	public inline function __set(idx:Int, val:Float):Float
+	{
+		ArrayBufferIO.setFloat32(this.buffer, this.byteOffset + (idx * BYTES_PER_ELEMENT), val);
+		return val;
+	}
+}
+#end // !js
