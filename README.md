@@ -6,7 +6,7 @@ PuffPuff is a high-performance, lightweight multimedia engine replacement for Li
 
 ## Benchmarks
 
-How PuffPuff is measured, how it compares with OpenFL's native text path, and how to reproduce it: [docs/benchmarks.md](docs/benchmarks.md).
+How PuffPuff is measured, how it compares with OpenFL's native text path, and how to reproduce it: [docs/benchmarks](docs/benchmarks/README.md).
 
 ## Attribution & License
 

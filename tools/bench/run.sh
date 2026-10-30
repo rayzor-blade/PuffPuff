@@ -10,6 +10,7 @@
 #
 # Each mode runs a timing pass, then an allocation pass with ASH_GC_TLAB=0 (exact allocated bytes).
 # Results go to .puffpuff/bench/<machine>-<mode>.json; baselines live in tools/bench/baselines/.
+# Storing an llvm baseline also regenerates the tables in docs/benchmarks (tools/bench/docs.py).
 # Baselines are per machine and per mode: compare numbers only against the same machine.
 # ASH=path picks the ash binary. BENCH_ALLOC_RUNS=n fixes the number of runs in the allocation pass; BENCH_DUMP=dir writes rendered frames; set before calling.
 set -e
@@ -61,6 +62,7 @@ for mode in $modes; do
 		if python3 -I "$here/report.py" check "$out/$id.json"; then
 			cp "$out/$id.json" "$here/baselines/$id.json"
 			echo "baseline stored: tools/bench/baselines/$id.json"
+			[ "$mode" = llvm ] && python3 -I "$here/docs.py"
 		else
 			echo "not storing a baseline from a run with failing cases" >&2
 			status=1

@@ -5,37 +5,46 @@
 
 Defaults: tools/bench/baselines/<machine>-llvm.json (from tools/bench/run.sh --baseline) and
 .puffpuff/bench/openfl/<machine>.json (from tools/bench/openfl/run.sh). Medians on both sides.
+docs.py uses `render` to fill docs/benchmarks/text.md.
 """
 import json, os, platform, sys
 
 machine = f"{platform.system()}-{platform.machine()}"
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
-pp_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "tools", "bench", "baselines", f"{machine}-llvm.json")
-of_path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(root, ".puffpuff", "bench", "openfl", f"{machine}.json")
-pp = {r["name"]: r for r in json.load(open(pp_path))["results"]}
-pp_meta = json.load(open(pp_path))["meta"]
-of_doc = json.load(open(of_path))
-of, of_meta = of_doc["results"], of_doc["meta"]
+default_pp = os.path.join(root, "tools", "bench", "baselines", f"{machine}-llvm.json")
+default_of = os.path.join(root, ".puffpuff", "bench", "openfl", f"{machine}.json")
 
 
-def ms(name):
-    return pp[name]["medianNs"] / 1e6
+def render(pp_path=default_pp, of_path=default_of):
+    """The comparison as Markdown: a line naming the versions, a blank line, the table."""
+    pp_doc = json.load(open(pp_path))
+    pp, pp_meta = {r["name"]: r for r in pp_doc["results"]}, pp_doc["meta"]
+    of_doc = json.load(open(of_path))
+    of, of_meta = of_doc["results"], of_doc["meta"]
+
+    def ms(name):
+        return pp[name]["medianNs"] / 1e6
+
+    reference = "whole lines, for reference"
+    rows = [
+        ("New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff)", of["layout.paragraph.us"]["median"] / 1000,
+         [("", ms("text.shape.paragraph")), (reference, ms("text.shape.paragraph.whole"))]),
+        ("200 labels, static, per frame, PuffPuff submitted", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.submit"))]),
+        ("200 labels, static, per frame, PuffPuff finished and read back", of["frame.static.ms"]["median"],
+         [("", ms("gpu.frame.text.static.readback"))]),
+        ("200 labels, text set every frame, PuffPuff submitted", of["frame.dynamic.ms"]["median"],
+         [("", ms("gpu.frame.text.dynamic.submit")), (reference, ms("gpu.frame.text.dynamic.whole.submit"))]),
+        ("200 labels, text set every frame, PuffPuff finished and read back", of["frame.dynamic.ms"]["median"],
+         [("", ms("gpu.frame.text.dynamic.readback")), (reference, ms("gpu.frame.text.dynamic.whole.readback"))]),
+    ]
+    out = [f"OpenFL {of_meta['openfl']} on Lime {of_meta['lime']}, hxcpp {of_meta['hxcpp']} release, {of_meta['runs']} runs ({of_meta['date']}); "
+           f"PuffPuff {pp_meta['commit']} on {pp_meta['ash']} ({pp_meta['mode']} tier); {pp_meta['cpu']}.", "",
+           "| Measurement | OpenFL (ms) | PuffPuff (ms) | PuffPuff is |", "|---|---:|---:|---:|"]
+    for label, a, variants in rows:
+        for name, b in variants:
+            out.append(f"| {label}{' (' + name + ')' if name else ''} | {a:.3f} | {b:.3f} | {a / b:.1f}x faster |")
+    return "\n".join(out)
 
 
-rows = [
-    ("New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff)",
-     of["layout.paragraph.us"]["median"] / 1000, [("", ms("text.shape.paragraph")), ("whole lines, for reference", ms("text.shape.paragraph.whole"))]),
-    ("200 labels, static, per frame, PuffPuff submitted", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.submit"))]),
-    ("200 labels, static, per frame, PuffPuff finished and read back", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.readback"))]),
-    ("200 labels, text set every frame, PuffPuff submitted", of["frame.dynamic.ms"]["median"],
-     [("", ms("gpu.frame.text.dynamic.submit")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.submit"))]),
-    ("200 labels, text set every frame, PuffPuff finished and read back", of["frame.dynamic.ms"]["median"],
-     [("", ms("gpu.frame.text.dynamic.readback")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.readback"))]),
-]
-print(f"OpenFL {of_meta['openfl']} on Lime {of_meta['lime']}, hxcpp {of_meta['hxcpp']} release, {of_meta['runs']} runs ({of_meta['date']}); "
-      f"PuffPuff {pp_meta['commit']} on {pp_meta['ash']} ({pp_meta['mode']} tier); {pp_meta['cpu']}.\n")
-print("| Measurement | OpenFL (ms) | PuffPuff (ms) | PuffPuff is |")
-print("|---|---:|---:|---:|")
-for label, a, variants in rows:
-    for name, b in variants:
-        print(f"| {label}{' (' + name + ')' if name else ''} | {a:.3f} | {b:.3f} | {a / b:.1f}x faster |")
+if __name__ == "__main__":
+    print(render(*(sys.argv[1:3])))
