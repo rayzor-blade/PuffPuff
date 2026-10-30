@@ -13,6 +13,8 @@ for the table compare_openfl.py prints. The rest of a page is written by hand. t
 """
 import json, os, platform, re, sys
 
+sys.dont_write_bytecode = True
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compare_openfl
 

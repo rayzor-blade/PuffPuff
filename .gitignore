@@ -15,3 +15,4 @@ tools/snapshot/bin/
 *.so
 *.dll
 .DS_Store
+__pycache__/

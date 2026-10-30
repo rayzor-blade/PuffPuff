@@ -53,6 +53,16 @@ class Main extends Sprite {
 		}
 		var dt = haxe.Timer.stamp() - t0;
 		Sys.println("layout.paragraph.us " + dt / PARAGRAPHS * 1e6);
+
+		// The layout result, so another backend can show it did the same work.
+		var tf = new TextField();
+		tf.defaultTextFormat = format;
+		tf.wordWrap = true;
+		tf.width = 300;
+		tf.text = paragraph + 0;
+		Sys.println("check.paragraph.lines " + tf.numLines);
+		Sys.println("check.paragraph.textWidth " + tf.textWidth);
+		Sys.println("check.paragraph.textHeight " + tf.textHeight);
 	}
 
 	function onFrame(_):Void {

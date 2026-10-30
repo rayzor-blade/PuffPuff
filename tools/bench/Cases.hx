@@ -17,6 +17,10 @@ import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.WgpuContext;
 import puffpuff.snapshot.Snapshot;
 import puffpuff.text.FontAtlas;
+#if openfl_wgpu
+import openfl.text.TextField;
+import openfl.text.TextFormat;
+#end
 
 private enum LabelMode {
 	Cached;
@@ -31,7 +35,11 @@ class Cases {
 	static inline var H = 512;
 
 	public static function all():Array<BenchCase> {
-		return math().concat(simd()).concat(image()).concat(text()).concat(engine()).concat(gpu());
+		var all = math().concat(simd()).concat(image()).concat(text()).concat(engine()).concat(gpu());
+		#if openfl_wgpu
+		all = all.concat(openflText());
+		#end
+		return all;
 	}
 
 	static var seed = 20240601;
@@ -496,6 +504,40 @@ class Cases {
 			batcher.flush(proj);
 		};
 	}
+
+	#if openfl_wgpu
+	/** OpenFL's own `TextField` on PuffPuff's Lime layer, with the same layout the OpenFL baseline app times. **/
+	static function openflText():Array<BenchCase> {
+		var format = new TextFormat("_sans", 14, 0xFFFFFF);
+		var paragraph = "The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly, and pack my box with five dozen liquor jugs. ";
+		function field(text:String):TextField {
+			var tf = new TextField();
+			tf.defaultTextFormat = format;
+			tf.wordWrap = true;
+			tf.width = 300;
+			tf.text = text;
+			return tf;
+		}
+		return [
+			{
+				name: "openfl.textfield.layout.paragraph",
+				run: () -> {
+					var tf = field(paragraph + (labelCounter++));
+					tf.numLines;
+					tf.textWidth;
+				},
+				check: () -> {
+					var tf = field(paragraph + "0");
+					return tf.numLines == 3 && tf.textHeight == 48 && tf.textWidth > 250 && tf.textWidth < 300 ? null : 'laid out as ${tf.numLines} lines, ${tf.textWidth} x ${tf.textHeight}';
+				},
+				checksum: () -> {
+					var tf = field(paragraph + "0");
+					return tf.numLines + ":" + tf.textWidth + ":" + tf.textHeight;
+				}
+			}
+		];
+	}
+	#end
 
 	static inline var LABELS = 200;
 	static final PARAGRAPH = "The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly, and pack my box with five dozen liquor jugs. 0";

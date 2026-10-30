@@ -40,7 +40,9 @@ mkdir -p "$out" "$bin" "$here/baselines"
 if [ -n "${ASH:-}" ]; then ash="$ASH"; elif [ -x "$HOME/.ash/bin/ash" ]; then ash="$HOME/.ash/bin/ash"; elif [ -x "$repo/../ash/target/release/ash" ]; then ash="$repo/../ash/target/release/ash"; else ash=ash; fi
 
 cd "$repo"
-haxe build.hxml -cp tools/bench -main Suite -hl "$bin/Suite.hl" 2>&1 | grep -v "Warning" || true
+openfl=""
+[ -d "$repo/../openfl/src" ] && openfl="-cp $repo/../openfl/src -D openfl=9.5.2 -D openfl_wgpu"
+haxe build.hxml -cp tools/bench $openfl -main Suite -hl "$bin/Suite.hl" 2>&1 | grep -v "Warning" || true
 
 export BENCH_MACHINE="$(uname -s)-$(uname -m)"
 export BENCH_COMMIT="$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src tools/bench 2>/dev/null || echo -dirty)"

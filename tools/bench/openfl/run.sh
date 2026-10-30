@@ -34,7 +34,7 @@ bin="$work/app/Export/macos/bin/TextBench.app/Contents/MacOS/TextBench"
 : >"$work/runs.txt"
 i=0
 while [ $i -lt "$runs" ]; do
-	"$bin" 2>/dev/null | grep -E '^(layout|frame)\.' >>"$work/runs.txt"
+	"$bin" 2>/dev/null | grep -E '^(layout|frame|check)\.' >>"$work/runs.txt"
 	i=$((i + 1))
 done
 
