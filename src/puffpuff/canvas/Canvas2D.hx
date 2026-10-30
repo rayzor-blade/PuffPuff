@@ -18,8 +18,9 @@ import puffpuff.gpu.WgpuContext3D;
  * shifted by the change in translation — no flattening, no sweep. Its triangles are copied out the
  * second time it is seen, so paths drawn only once never pay for the copy.
  *
- * Invariant: at most one `flush` per canvas per submitted encoder — vertex/paint buffers are
- * rewritten through the queue, which lands before any pass of that submission runs.
+ * `flush` may run any number of times per frame (interleaved with sprites, per camera, per render
+ * target). Queue writes land before the whole submission runs, so each flush appends to this
+ * frame's vertex/paint buffers instead of overwriting them, and draws only its own range.
  */
 class Canvas2D {
 	/** Max chord deviation of flattened curves, in target pixels. **/
@@ -49,6 +50,11 @@ class Canvas2D {
 	var vertexCapacity = 0;
 	var paintBuffer:Null<GpuBuffer> = null;
 	var paintCapacity = 0;
+
+	/** Bytes of each buffer already written this `frame`. Later flushes append after them. **/
+	var vertexUsed = 0;
+	var paintUsed = 0;
+	var frame = -1;
 
 	public var drawCount(get, never):Int;
 	public var vertexCount(get, never):Int;
@@ -183,30 +189,38 @@ class Canvas2D {
 		var count = mesh.vertexCount();
 		if (count == 0)
 			return;
+		if (frame != ctx.frame) {
+			frame = ctx.frame;
+			vertexUsed = paintUsed = 0;
+		}
 		var dev = ctx.wgpu.device;
-		if (vertexBuffer == null || mesh.length > vertexCapacity) {
+		if (vertexBuffer == null || vertexUsed + mesh.length > vertexCapacity) {
 			if (vertexBuffer != null)
-				vertexBuffer.destroy();
-			vertexCapacity = mesh.length + (mesh.length >> 1);
+				ctx.retire(vertexBuffer);
+			vertexCapacity = Std.int(Math.max(vertexCapacity * 2, mesh.length + (mesh.length >> 1)));
 			vertexBuffer = dev.createBuffer(new GpuBufferDescriptor(vertexCapacity, BufferUsage.VERTEX | BufferUsage.COPY_DST));
+			vertexUsed = 0;
 		}
 		var paintBytes = paintCount * Paint.RECORD_BYTES;
-		if (paintBuffer == null || paintBytes > paintCapacity) {
+		if (paintBuffer == null || paintUsed + paintBytes > paintCapacity) {
 			if (paintBuffer != null)
-				paintBuffer.destroy();
-			paintCapacity = paintBytes + (paintBytes >> 1);
+				ctx.retire(paintBuffer);
+			paintCapacity = Std.int(Math.max(paintCapacity * 2, paintBytes + (paintBytes >> 1)));
 			paintBuffer = dev.createBuffer(new GpuBufferDescriptor(paintCapacity, BufferUsage.STORAGE | BufferUsage.COPY_DST));
+			paintUsed = 0;
 		}
-		ctx.wgpu.queue.writeBuffer(vertexBuffer, 0, mesh.bytes, mesh.length);
-		ctx.wgpu.queue.writeBuffer(paintBuffer, 0, paints, paintBytes);
-		ctx.drawVectorMesh(vertexBuffer, count, paintBuffer, projection);
+		ctx.wgpu.queue.writeBuffer(vertexBuffer, vertexUsed, mesh.bytes, mesh.length);
+		ctx.wgpu.queue.writeBuffer(paintBuffer, paintUsed, paints, paintBytes);
+		ctx.drawVectorMesh(vertexBuffer, count, paintBuffer, projection, vertexUsed >> 5, Std.int(paintUsed / Paint.RECORD_BYTES));
+		vertexUsed += mesh.length;
+		paintUsed += paintBytes;
 	}
 
 	public function dispose():Void {
 		if (vertexBuffer != null)
-			vertexBuffer.destroy();
+			ctx.retire(vertexBuffer);
 		if (paintBuffer != null)
-			paintBuffer.destroy();
+			ctx.retire(paintBuffer);
 		vertexBuffer = paintBuffer = null;
 		shapes.clear();
 		mesh.release();

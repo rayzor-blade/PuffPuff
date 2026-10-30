@@ -1,7 +1,7 @@
 package puffpuff.gpu.shaders;
 
 /**
- * Default untextured 2D graphics shader (positions + per-vertex colors + colour transform).
+ * Default untextured 2D graphics shader (positions + per-vertex colors + color transform).
  */
 class GraphicsShader implements hlwgpu.hxsl.Shader {
 	static var SRC = {

@@ -11,11 +11,11 @@ enum abstract PaintKind(Int) to Int {
 }
 
 /**
- * Fill colour source. Encoded as `RECORD_FLOATS` (8 × vec4) for `VectorPathShader`:
+ * Fill color source. Encoded as `RECORD_FLOATS` (8 × vec4) for `VectorPathShader`:
  *   0: kind, stopCount, opacity, 0
  *   1: geometry in target pixels — linear `x0, y0, x1, y1`; radial `cx, cy, r, 0`
  *   2: stop offsets (≤ 4)
- *   3..6: stop colours, straight RGBA (solid uses 3)
+ *   3..6: stop colors, straight RGBA (solid uses 3)
  *   7: reserved
  * Gradient geometry is in path units and goes through the draw transform at encode time.
  */

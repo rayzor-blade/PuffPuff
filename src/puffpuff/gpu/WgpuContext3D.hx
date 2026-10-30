@@ -51,6 +51,85 @@ import puffpuff.gpu.shaders.InstancedQuadShader;
 import puffpuff.gpu.shaders.VectorPathShader;
 
 /**
+ * A `GpuBuffer` that can be uploaded to after a draw in the same frame, as GL allows.
+ *
+ * `queue.writeBuffer` lands before the whole submission runs, so rewriting a buffer this frame's commands already read
+ * would change what those draws see. Such an upload goes to another buffer, seeded from a CPU shadow so a partial
+ * upload keeps the rest of the contents. Buffers swapped out in earlier (submitted) frames get reused, so steady state
+ * allocates nothing.
+ */
+class FrameSafeBuffer {
+	public var gpuBuffer(default, null):GpuBuffer;
+
+	/** `context.frame` of the last draw reading `gpuBuffer`. **/
+	public var drawnFrame:Int = -1;
+
+	final context:WgpuContext3D;
+	final usage:Int;
+	final size:Int;
+	final shadow:Bytes;
+
+	/** End of the furthest byte ever uploaded. The shadow is zero beyond it. **/
+	var extent = 0;
+
+	final spare:Array<GpuBuffer> = [];
+	final swapped:Array<GpuBuffer> = [];
+	var swappedFrame = -1;
+
+	/** `size` is rounded up to 4 bytes, the `writeBuffer` granularity. **/
+	public function new(context:WgpuContext3D, size:Int, usage:Int) {
+		this.context = context;
+		this.size = (Std.int(Math.max(4, size)) + 3) & ~3;
+		this.usage = usage | BufferUsage.COPY_DST;
+		this.shadow = Bytes.alloc(this.size);
+		this.gpuBuffer = create();
+	}
+
+	inline function create():GpuBuffer
+		return context.wgpu.device.createBuffer(new GpuBufferDescriptor(size, usage));
+
+	/** Writes `len` bytes of `data` from `pos` at byte `offset`, clipped to the buffer. **/
+	public function write(offset:Int, data:Bytes, pos:Int, len:Int):Void {
+		if (offset < 0 || offset >= size) return;
+		len = Std.int(Math.min(len, Math.min(size - offset, data.length - pos)));
+		if (len <= 0) return;
+		shadow.blit(offset, data, pos, len);
+		var end = offset + len;
+		if (end > extent) extent = end;
+		var queue = context.wgpu.queue;
+		if (drawnFrame == context.frame) {
+			rename();
+			queue.writeBuffer(gpuBuffer, 0, shadow, (extent + 3) & ~3);
+			return;
+		}
+		var from = offset & ~3, to = (end + 3) & ~3;
+		if (from == offset && to == end && pos == 0)
+			queue.writeBuffer(gpuBuffer, offset, data, len);
+		else
+			queue.writeBuffer(gpuBuffer, from, shadow.sub(from, to - from), to - from);
+	}
+
+	function rename():Void {
+		if (swappedFrame != context.frame) {
+			for (b in swapped) spare.push(b);
+			swapped.resize(0);
+			swappedFrame = context.frame;
+		}
+		swapped.push(gpuBuffer);
+		gpuBuffer = spare.length > 0 ? spare.pop() : create();
+		drawnFrame = -1;
+	}
+
+	public function dispose():Void {
+		for (b in swapped) context.retire(b);
+		for (b in spare) context.retire(b);
+		swapped.resize(0);
+		spare.resize(0);
+		if (gpuBuffer.valid()) context.retire(gpuBuffer);
+	}
+}
+
+/**
  * Hardware WebGPU VertexBuffer3D backed by `gpu.GpuBuffer`.
  */
 class WgpuVertexBuffer3D {
@@ -58,24 +137,24 @@ class WgpuVertexBuffer3D {
 	public var numVertices(default, null):Int;
 	public var strideFloats(default, null):Int;
 	public var strideBytes(default, null):Int;
-	public var gpuBuffer(default, null):GpuBuffer;
+	public var gpuBuffer(get, never):GpuBuffer;
+	public final storage:FrameSafeBuffer;
+
+	inline function get_gpuBuffer():GpuBuffer
+		return storage.gpuBuffer;
 
 	public function new(context:WgpuContext3D, numVertices:Int, data32PerVertex:Int) {
 		this.context = context;
 		this.numVertices = numVertices;
 		this.strideFloats = data32PerVertex;
 		this.strideBytes = data32PerVertex * 4;
-		var byteSize:haxe.Int64 = Std.int(Math.max(16, numVertices * strideBytes));
-		this.gpuBuffer = context.wgpu.device.createBuffer(
-			new GpuBufferDescriptor(byteSize, BufferUsage.VERTEX | BufferUsage.COPY_DST)
-		);
+		this.storage = new FrameSafeBuffer(context, Std.int(Math.max(16, numVertices * strideBytes)), BufferUsage.VERTEX);
 	}
 
 	public function uploadFromBytes(data:Bytes, startVertex:Int = 0, count:Int = -1):Void {
 		if (data == null) return;
 		var len = count > 0 ? count * strideBytes : data.length;
-		var offset:haxe.Int64 = startVertex * strideBytes;
-		context.wgpu.queue.writeBuffer(gpuBuffer, offset, data, len);
+		storage.write(startVertex * strideBytes, data, 0, len);
 	}
 
 	public function uploadFromFloat32Array(data:Float32Array, startVertex:Int = 0, count:Int = -1):Void {
@@ -85,7 +164,7 @@ class WgpuVertexBuffer3D {
 	}
 
 	public function dispose():Void {
-		if (gpuBuffer.valid()) gpuBuffer.destroy();
+		storage.dispose();
 	}
 }
 
@@ -95,30 +174,23 @@ class WgpuVertexBuffer3D {
 class WgpuIndexBuffer3D {
 	public var context(default, null):WgpuContext3D;
 	public var numIndices(default, null):Int;
-	public var gpuBuffer(default, null):GpuBuffer;
+	public var gpuBuffer(get, never):GpuBuffer;
+	public final storage:FrameSafeBuffer;
+
+	inline function get_gpuBuffer():GpuBuffer
+		return storage.gpuBuffer;
 
 	public function new(context:WgpuContext3D, numIndices:Int) {
 		this.context = context;
 		this.numIndices = numIndices;
-		// WebGPU requires writeBuffer size to be a multiple of 4 bytes.
-		var byteSize:haxe.Int64 = (numIndices * 2 + 3) & ~3;
-		if (byteSize < 4) byteSize = 4;
-		this.gpuBuffer = context.wgpu.device.createBuffer(
-			new GpuBufferDescriptor(byteSize, BufferUsage.INDEX | BufferUsage.COPY_DST)
-		);
+		this.storage = new FrameSafeBuffer(context, numIndices * 2, BufferUsage.INDEX);
 	}
 
+	/** Odd `startOffset`/`count` work, since the shadow pads each write to 4 bytes. **/
 	public function uploadFromBytes(data:Bytes, startOffset:Int = 0, count:Int = -1):Void {
 		if (data == null) return;
-		var rawLen = count > 0 ? count * 2 : data.length;
-		var alignedLen = (rawLen + 3) & ~3;
-		var uploadData = data;
-		if (data.length < alignedLen) {
-			uploadData = Bytes.alloc(alignedLen);
-			uploadData.blit(0, data, 0, data.length);
-		}
-		var offset:haxe.Int64 = startOffset * 2;
-		context.wgpu.queue.writeBuffer(gpuBuffer, offset, uploadData, alignedLen);
+		var len = count > 0 ? count * 2 : data.length;
+		storage.write(startOffset * 2, data, 0, len);
 	}
 
 	public function uploadFromArray(indices:Array<Int>, startOffset:Int = 0, count:Int = -1):Void {
@@ -133,7 +205,7 @@ class WgpuIndexBuffer3D {
 	}
 
 	public function dispose():Void {
-		if (gpuBuffer.valid()) gpuBuffer.destroy();
+		storage.dispose();
 	}
 }
 
@@ -236,6 +308,12 @@ class WgpuContext3D {
 	public var linearClampSampler(default, null):GpuSampler;
 	public var nearestClampSampler(default, null):GpuSampler;
 	public var linearRepeatSampler(default, null):GpuSampler;
+
+	/**
+	 * Frames submitted so far. `queue.writeBuffer` lands before the whole submission runs, so a buffer drawn in this frame
+	 * can't be rewritten in place until `frame` moves on.
+	 */
+	public var frame(default, null):Int = 0;
 
 	// Tracked Context3D state
 	public var blendEnabled:Bool = true;
@@ -393,7 +471,7 @@ class WgpuContext3D {
 			enc.passColour(view, clearR, clearG, clearB, clearA);
 			enc.passBegin();
 		} else {
-			// `passColour` always clears; keeping prior contents needs an explicit `LoadOp.Load` attachment.
+			// `passColor` always clears; keeping prior contents needs an explicit `LoadOp.Load` attachment.
 			var attachment = new GpuRenderPassColorAttachment(LoadOp.Load, StoreOp.Store);
 			attachment.viewTextureView(view);
 			var desc = new GpuRenderPassDescriptor();
@@ -512,6 +590,8 @@ class WgpuContext3D {
 		enc.renderSetBindGroup(0, bindGroup);
 		enc.renderSetVertexBuffer(0, vb0.buffer.gpuBuffer);
 		enc.renderSetIndexBuffer(indexBuffer.gpuBuffer, IndexFormat.Uint16);
+		vb0.buffer.storage.drawnFrame = frame;
+		indexBuffer.storage.drawnFrame = frame;
 
 		var indexCount = numTriangles >= 0 ? numTriangles * 3 : indexBuffer.numIndices - firstIndex;
 		enc.renderDrawIndexed(indexCount, 1);
@@ -600,7 +680,7 @@ class WgpuContext3D {
 	 * Draws `vertexCount` vertices of a `puffpuff.canvas.Mesh` layout buffer (32-byte stride:
 	 * `head` vec4 @0, `edges` vec4 @16) with `VectorPathShader`, reading paints from `paints` (storage).
 	 */
-	public function drawVectorMesh(vertices:GpuBuffer, vertexCount:Int, paints:GpuBuffer, matrix:Matrix4, firstVertex:Int = 0):Void {
+	public function drawVectorMesh(vertices:GpuBuffer, vertexCount:Int, paints:GpuBuffer, matrix:Matrix4, firstVertex:Int = 0, paintBase:Int = 0):Void {
 		if (vertexCount <= 0) return;
 		var wasPassActive = passActive;
 		if (!wasPassActive) beginRenderPass(null);
@@ -639,6 +719,7 @@ class WgpuContext3D {
 		var uboSize = VectorPathShader.PARAMS_SIZE;
 		var uboBytes = Bytes.alloc(uboSize);
 		uboBytes.blit(VectorPathShader.PARAMS_matrix, matrix.buffer, matrix.byteOffset, 64);
+		uboBytes.setFloat(VectorPathShader.PARAMS_paintBase, paintBase);
 		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
 		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
 
@@ -714,7 +795,14 @@ class WgpuContext3D {
 		tempResources.push({buffers: [ubo], bindGroups: [bindGroup]});
 	}
 
+	/** Destroys `buffer` after this frame is submitted, since recorded commands may still read it. **/
+	public inline function retire(buffer:GpuBuffer):Void {
+		tempResources.push({buffers: [buffer], bindGroups: []});
+	}
+
+	/** Called after the frame's encoder is submitted. Starts a new `frame`. **/
 	public function flushTempResources():Void {
+		frame++;
 		for (res in tempResources) {
 			for (bg in res.bindGroups) {
 				if (bg.valid()) bg.destroy();

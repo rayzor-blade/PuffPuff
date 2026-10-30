@@ -15,6 +15,9 @@ import lime.graphics.RenderContext;
 class Snapshot {
 	static var offscreen:Null<Offscreen>;
 
+	/** RGBA8 pixels of the last `capture`, for scenes that assert on what they drew. **/
+	public static var pixels(default, null):Null<haxe.io.Bytes>;
+
 	/** Where snapshots go: `$PUFFPUFF_SNAPSHOT_DIR`, or `.puffpuff/snapshots` under the working directory. **/
 	public static function dir():String {
 		var d = Sys.getEnv("PUFFPUFF_SNAPSHOT_DIR");
@@ -111,7 +114,7 @@ class Snapshot {
 
 		var pixelWidth = Std.int(Math.max(1, Math.round(width * scale)));
 		var pixelHeight = Std.int(Math.max(1, Math.round(height * scale)));
-		var pixels = offscreen.renderToRgba8(draw, width, height);
+		pixels = offscreen.renderToRgba8(draw, width, height);
 
 		sys.FileSystem.createDirectory(dir());
 		var path = sys.FileSystem.absolutePath(haxe.io.Path.join([dir(), '$name.png']));

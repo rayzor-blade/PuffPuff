@@ -16,6 +16,8 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 			color:Vec4
 		};
 		@param var matrix:Mat4;
+		/** Added to each vertex's `paint`. Where this draw's records start in `paints`. **/
+		@param var paintBase:Float;
 		@param var paints:StorageBuffer<Vec4>;
 		var pixel:Vec2;
 		var coverage:Float;
@@ -25,7 +27,7 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 		function vertex() {
 			pixel = input.head.xy;
 			coverage = input.head.z;
-			paint = input.head.w;
+			paint = input.head.w + paintBase;
 			edgeDist = input.edges;
 			output.position = vec4(input.head.xy, 0.0, 1.0) * matrix;
 		}
