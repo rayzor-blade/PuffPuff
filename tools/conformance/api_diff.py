@@ -13,9 +13,9 @@ import argparse, json, os, re, sys, warnings
 # Upstream types this backend replaces rather than ports: it has no OpenGL, Cairo, OpenAL or
 # HarfBuzz, and no per-API render contexts (`RenderContext` itself is kept).
 OUT_OF_SCOPE = (
-    "lime.graphics.opengl.", "lime.graphics.cairo.", "lime.media.openal.", "lime.media.howlerjs.",
+    "lime.graphics.opengl.", "lime.media.openal.", "lime.media.howlerjs.",
     "lime.text.harfbuzz.", "lime.media.vorbis.", "lime.net.curl.", "lime.net.oauth.",
-    "lime.graphics.CairoRenderContext", "lime.graphics.Canvas2DRenderContext", "lime.graphics.DOMRenderContext",
+    "lime.graphics.Canvas2DRenderContext", "lime.graphics.DOMRenderContext",
     "lime.graphics.FlashRenderContext", "lime.graphics.OpenGL", "lime.graphics.GL", "lime.graphics.VulkanRenderContext",
     "lime.graphics.WebGL", "lime.media.FlashAudioContext", "lime.media.HTML5AudioContext",
     "lime.media.WebAudioContext", "lime.media.OpenALAudioContext", "lime.system.JNI", "lime.system.CFFI",
@@ -49,23 +49,24 @@ def active_lines(text):
     stack = []  # (parent_active, taken, active)
     for line in text.split("\n"):
         s = line.strip()
-        m = re.match(r"#(if|elseif)\s+(.*)", s)
+        m = re.match(r"#(if|elseif)\b\s*(.*)", s)
         if m and m.group(1) == "if":
             parent = all(a for _, _, a in stack)
             val = evaluate(m.group(2))
             stack.append((parent, val, val))
             continue
-        if m:
+        if m and stack:
             parent, taken, _ = stack[-1]
             val = (not taken) and evaluate(m.group(2))
             stack[-1] = (parent, taken or val, val)
             continue
-        if s.startswith("#else"):
+        if s.startswith("#else") and stack:
             parent, taken, _ = stack[-1]
             stack[-1] = (parent, True, not taken)
             continue
         if s.startswith("#end"):
-            stack.pop()
+            if stack:
+                stack.pop()
             continue
         if s.startswith("#"):
             continue
