@@ -11,7 +11,7 @@
 # Each mode runs a timing pass, then an allocation pass with ASH_GC_TLAB=0 (exact allocated bytes).
 # Results go to .puffpuff/bench/<machine>-<mode>.json; baselines live in tools/bench/baselines/.
 # Baselines are per machine and per mode: compare numbers only against the same machine.
-# BENCH_ALLOC_RUNS=n fixes the number of runs in the allocation pass; BENCH_DUMP=dir writes rendered frames; set before calling.
+# ASH=path picks the ash binary. BENCH_ALLOC_RUNS=n fixes the number of runs in the allocation pass; BENCH_DUMP=dir writes rendered frames; set before calling.
 set -e
 modes=both
 baseline=0
@@ -36,7 +36,7 @@ bin="$repo/tools/snapshot/bin"
 out="$repo/.puffpuff/bench"
 mkdir -p "$out" "$bin" "$here/baselines"
 
-if [ -x "$HOME/.ash/bin/ash" ]; then ash="$HOME/.ash/bin/ash"; elif [ -x "$repo/../ash/target/release/ash" ]; then ash="$repo/../ash/target/release/ash"; else ash=ash; fi
+if [ -n "${ASH:-}" ]; then ash="$ASH"; elif [ -x "$HOME/.ash/bin/ash" ]; then ash="$HOME/.ash/bin/ash"; elif [ -x "$repo/../ash/target/release/ash" ]; then ash="$repo/../ash/target/release/ash"; else ash=ash; fi
 
 cd "$repo"
 haxe build.hxml -cp tools/bench -main Suite -hl "$bin/Suite.hl" 2>&1 | grep -v "Warning" || true
