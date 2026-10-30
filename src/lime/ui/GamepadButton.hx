@@ -40,8 +40,8 @@ enum abstract GamepadButton(Int) from Int to Int {
 		};
 	}
 
-	public static function toString(button:GamepadButton):String {
-		return switch (button) {
+	public inline function toString():String {
+		return switch (this) {
 			case A: "A";
 			case B: "B";
 			case X: "X";
@@ -57,7 +57,7 @@ enum abstract GamepadButton(Int) from Int to Int {
 			case DPAD_DOWN: "DPAD_DOWN";
 			case DPAD_LEFT: "DPAD_LEFT";
 			case DPAD_RIGHT: "DPAD_RIGHT";
-			default: "UNKNOWN";
+			default: "UNKNOWN (" + this + ")";
 		};
 	}
 }

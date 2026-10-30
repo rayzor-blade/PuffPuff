@@ -82,8 +82,8 @@ class Phase1SmokeTest extends Application {
 		}
 
 		Gamepad.__poll();
-		if (GamepadButton.toString(GamepadButton.A) != "A") throw 'GamepadButton test failed';
-		if (GamepadAxis.toString(GamepadAxis.LEFT_X) != "LEFT_X") throw 'GamepadAxis test failed';
+		if (GamepadButton.A.toString() != "A") throw 'GamepadButton test failed';
+		if (GamepadAxis.LEFT_X.toString() != "LEFT_X") throw 'GamepadAxis test failed';
 		var touch = new Touch(0.5, 0.5, 1, 0, 0, 1.0, 0);
 		if (touch.id != 1) throw 'Touch test failed';
 		var font = new Font("Arimo");

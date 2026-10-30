@@ -19,15 +19,15 @@ enum abstract GamepadAxis(Int) from Int to Int {
 		};
 	}
 
-	public static function toString(axis:GamepadAxis):String {
-		return switch (axis) {
+	public inline function toString():String {
+		return switch (this) {
 			case LEFT_X: "LEFT_X";
 			case LEFT_Y: "LEFT_Y";
 			case RIGHT_X: "RIGHT_X";
 			case RIGHT_Y: "RIGHT_Y";
 			case TRIGGER_LEFT: "TRIGGER_LEFT";
 			case TRIGGER_RIGHT: "TRIGGER_RIGHT";
-			default: "UNKNOWN";
+			default: "UNKNOWN (" + this + ")";
 		};
 	}
 }
