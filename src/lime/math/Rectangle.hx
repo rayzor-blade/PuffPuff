@@ -178,4 +178,13 @@ class Rectangle {
 	private inline function set_top(t:Float):Float { height -= t - y; y = t; return t; }
 	private inline function get_topLeft():Vector2 return new Vector2(x, y);
 	private inline function set_topLeft(p:Vector2):Vector2 { x = p.x; y = p.y; return p.clone(); }
+
+	@:noCompletion private function __toFlashRectangle():#if flash FlashRectangle #else Dynamic #end
+	{
+		#if flash
+		return new FlashRectangle(x, y, width, height);
+		#else
+		return null;
+		#end
+	}
 }

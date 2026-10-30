@@ -1,7 +1,10 @@
 import Harness.BenchCase;
 import ash.simd.Vec;
+import lime.graphics.Image;
 import lime.math.Matrix3;
 import lime.math.Matrix4;
+import lime.math.Rectangle;
+import lime.math.Vector2;
 import lime.math.Vector4;
 import lime.utils.Float32Array;
 import puffpuff.canvas.Affine;
@@ -21,7 +24,7 @@ class Cases {
 	static inline var H = 512;
 
 	public static function all():Array<BenchCase> {
-		return math().concat(simd()).concat(engine()).concat(gpu());
+		return math().concat(simd()).concat(image()).concat(engine()).concat(gpu());
 	}
 
 	static var seed = 20240601;
@@ -225,6 +228,84 @@ class Cases {
 
 	static function meshHash(cv:Canvas2D):String {
 		return Harness.fnv(cv.mesh.bytes, 0, cv.mesh.length);
+	}
+
+	/** Pixel operations of `lime.graphics.Image` on a 256 x 256 image. `ops` is pixels. **/
+	static function image():Array<BenchCase> {
+		var n = 256;
+		var px = n * n;
+		var area = new Rectangle(0, 0, n, n);
+		var origin = new Vector2(0, 0);
+		var src = new Image(null, 0, 0, n, n, 0x336699FF);
+		var alpha = new Image(null, 0, 0, n, n, 0x33669980);
+		var dst = new Image(null, 0, 0, n, n, 0x00000000);
+		var same = (img:Image, x:Int, y:Int, rgba:Int) -> img.getPixel32(x, y, lime.graphics.PixelFormat.RGBA32) == rgba;
+		return [
+			{
+				name: "image.fillRect",
+				ops: px,
+				run: () -> dst.fillRect(area, 0xFF8040FF),
+				check: () -> {
+					dst.fillRect(area, 0xFF8040FF);
+					for (pt in [[0, 0], [n - 1, 0], [n >> 1, n >> 1], [n - 1, n - 1]]) {
+						if (!same(dst, pt[0], pt[1], 0xFF8040FF)) return 'pixel ${pt[0]},${pt[1]} not filled';
+					}
+					return null;
+				},
+				checksum: () -> Harness.fnv(dst.buffer.data.toBytes(), 0, px * 4)
+			},
+			{
+				name: "image.copyPixels",
+				ops: px,
+				run: () -> dst.copyPixels(src, area, origin),
+				check: () -> {
+					dst.fillRect(area, 0);
+					dst.copyPixels(src, area, origin);
+					for (pt in [[0, 0], [n - 1, n - 1], [n >> 1, 3]]) {
+						if (!same(dst, pt[0], pt[1], 0x336699FF)) return 'pixel ${pt[0]},${pt[1]} not copied';
+					}
+					return null;
+				},
+				checksum: () -> Harness.fnv(dst.buffer.data.toBytes(), 0, px * 4)
+			},
+			{
+				name: "image.copyPixels.merge",
+				ops: px,
+				run: () -> dst.copyPixels(alpha, area, origin, null, null, true),
+				check: () -> {
+					dst.fillRect(area, 0xFFFFFFFF);
+					dst.copyPixels(alpha, area, origin, null, null, true);
+					var c = dst.getPixel32(5, 5, lime.graphics.PixelFormat.RGBA32);
+					if ((c & 0xFF) != 0xFF) return 'merged alpha over opaque should stay opaque, got ${StringTools.hex(c, 8)}';
+					return null;
+				},
+				checksum: () -> Harness.fnv(dst.buffer.data.toBytes(), 0, px * 4)
+			},
+			{
+				name: "image.getPixels",
+				ops: px,
+				run: () -> src.getPixels(area),
+				check: () -> {
+					var b = src.getPixels(area);
+					if (b.length != px * 4) return 'got ${b.length} bytes';
+					return b.get(0) == 0x33 && b.get(1) == 0x66 && b.get(2) == 0x99 && b.get(3) == 0xFF ? null : 'first pixel bytes wrong';
+				},
+				checksum: () -> {
+					var b = src.getPixels(area);
+					return Harness.fnv(b, 0, b.length);
+				}
+			},
+			{
+				name: "image.setPixel32.row",
+				ops: n,
+				run: () -> for (x in 0...n) dst.setPixel32(x, 7, 0xAABBCCDD),
+				check: () -> {
+					for (x in 0...n) dst.setPixel32(x, 7, 0xAABBCCDD);
+					return same(dst, 0, 7, 0xAABBCCDD) && same(dst, n - 1, 7, 0xAABBCCDD) ? null : 'row not written';
+				},
+				checksum: () -> Harness.fnv(dst.buffer.data.toBytes(), 0, px * 4)
+			}
+		];
 	}
 
 	static function engine():Array<BenchCase> {

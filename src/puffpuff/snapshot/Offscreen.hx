@@ -15,6 +15,7 @@ import lime.graphics.Image;
 import lime.graphics.ImageBuffer;
 import lime.graphics.PixelFormat;
 import lime.graphics.RenderContext;
+import lime.utils.UInt8Array;
 import puffpuff.gpu.WgpuContext;
 
 /**
@@ -115,7 +116,7 @@ class Offscreen {
 		var pixelWidth = Std.int(Math.max(1, Math.round(width * scale)));
 		var pixelHeight = Std.int(Math.max(1, Math.round(height * scale)));
 		var bytes = renderToRgba8(draw, width, height);
-		return new Image(new ImageBuffer(bytes, pixelWidth, pixelHeight, 32, PixelFormat.RGBA32), 0, 0, pixelWidth, pixelHeight);
+		return new Image(new ImageBuffer(UInt8Array.fromBytes(bytes), pixelWidth, pixelHeight, 32, PixelFormat.RGBA32), 0, 0, pixelWidth, pixelHeight);
 	}
 
 	/**

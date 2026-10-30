@@ -62,7 +62,7 @@ class Phase1SmokeTest extends Application {
 		m1.append(m2);
 
 		// 4. Test Image buffer creation and AudioBuffer/AudioSource (hlavi)
-		var img = new Image(null, 0, 0, 16, 16, 0xFF336699);
+		var img = new Image(null, 0, 0, 16, 16, 0x336699FF);
 		if (img.width != 16 || img.data.length != 16 * 16 * 4) throw 'Image test failed';
 
 		var audioBuf = new AudioBuffer();
@@ -74,10 +74,10 @@ class Phase1SmokeTest extends Application {
 		var i16 = new Int16Array([-32000, 0, 32000]);
 		if (i16[0] != -32000 || i16[2] != 32000) throw 'Int16Array signed test failed: ${i16[0]}, ${i16[2]}';
 
-		var encodedPng = Png.encode(img.width, img.height, img.data);
+		var encodedPng = Png.encode(img.width, img.height, img.data.toBytes());
 		var decodedImg = Image.fromBytes(encodedPng);
 		if (decodedImg == null || decodedImg.width != 16 || decodedImg.height != 16) throw 'Image PNG roundtrip failed';
-		if (decodedImg.data.get(0) != 0x33 || decodedImg.data.get(1) != 0x66 || decodedImg.data.get(2) != 0x99) {
+		if (decodedImg.data[0] != 0x33 || decodedImg.data[1] != 0x66 || decodedImg.data[2] != 0x99) {
 			throw 'Image PNG pixel mismatch';
 		}
 

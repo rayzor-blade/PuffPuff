@@ -75,4 +75,13 @@ class Vector2 {
 	private inline function get_lengthSquared():Float {
 		return x * x + y * y;
 	}
+
+	@:noCompletion private function __toFlashPoint():#if flash Point #else Dynamic #end
+	{
+		#if flash
+		return new Point(x, y);
+		#else
+		return null;
+		#end
+	}
 }

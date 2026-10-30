@@ -283,7 +283,7 @@ class WgpuTexture {
 
 	public function uploadFromImage(image:Image):Void {
 		if (image == null || image.data == null) return;
-		uploadFromBytes(image.data, image.width * 4);
+		uploadFromBytes(image.data.toBytes(), image.width * 4);
 	}
 
 	public function dispose():Void {

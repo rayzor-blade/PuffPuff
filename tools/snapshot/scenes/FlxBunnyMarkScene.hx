@@ -43,7 +43,7 @@ class FlxBunnyMarkScene {
 				}
 			}
 		}
-		return new Image(new ImageBuffer(bytes, w, h, 32, 0), 0, 0, w, h);
+		return new Image(new ImageBuffer(lime.utils.UInt8Array.fromBytes(bytes), w, h, 32, 0), 0, 0, w, h);
 	}
 
 	static function main() {

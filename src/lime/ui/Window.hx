@@ -438,7 +438,7 @@ class Window {
 
 	public function setIcon(image:Image):Void {
 		if (__nativeWindow.valid() && image != null && image.data != null) {
-			__nativeWindow.setIcon(image.data, image.width, image.height);
+			__nativeWindow.setIcon(image.data.toBytes(), image.width, image.height);
 		}
 	}
 

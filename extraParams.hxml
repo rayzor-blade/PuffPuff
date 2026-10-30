@@ -4,3 +4,4 @@
 -D native
 -D ash_simd_no_hdll
 --macro puffpuff.macro.DefaultFonts.use()
+-D disable_cffi
