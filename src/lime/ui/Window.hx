@@ -8,6 +8,11 @@ import lime.graphics.Image;
 import lime.graphics.RenderContext;
 import lime.system.Display;
 import lime.system.DisplayMode;
+import lime.math.Rectangle;
+import lime.app.VSyncMode;
+import puffpuff.app.WindowBackend;
+import window.Theme;
+import window.WindowLevel;
 import puffpuff.gpu.WgpuContext;
 import window.CursorIcon;
 import window.MouseElementState;
@@ -15,6 +20,7 @@ import window.MouseScrollDelta;
 import window.PhysicalKey;
 import window.WindowAttributes as NativeWindowAttributes;
 
+@:access(lime.app.Application)
 class Window {
 	public var application:Application;
 	public var borderless(get, set):Bool;
@@ -40,6 +46,23 @@ class Window {
 	public var width(get, set):Int;
 	public var x(get, set):Int;
 	public var y(get, set):Int;
+
+	public var alwaysOnTop(get, set):Bool;
+	public var appearance(get, set):WindowAppearance;
+	public var effectiveAppearance(get, never):WindowAppearance;
+	public var element:Dynamic;
+	public var flash:Dynamic;
+	public var keyboardGrab(get, set):Bool;
+	public var maxHeight(get, set):Int;
+	public var maxWidth(get, set):Int;
+	public var minHeight(get, set):Int;
+	public var minWidth(get, set):Int;
+	public var mouseRect(get, set):Rectangle;
+	public var opacity(get, set):Float;
+	public var preciseMouseWheel:Bool = false;
+	public var transparent(get, never):Bool;
+	public var visible(get, set):Bool;
+	public var vsyncMode(get, set):VSyncMode;
 
 	public var onActivate = new Event<Void->Void>();
 	public var onClose = new Event<Void->Void>();
@@ -68,10 +91,30 @@ class Window {
 	public var onRestore = new Event<Void->Void>();
 	public var onTextEdit = new Event<String->Int->Int->Void>();
 	public var onTextInput = new Event<String->Void>();
+	public var onDisplayScaleChange(default, null) = new Event<Void->Void>();
+	public var onHide(default, null) = new Event<Void->Void>();
+	public var onMaximize(default, null) = new Event<Void->Void>();
+	public var onShow(default, null) = new Event<Void->Void>();
 
 	@:noCompletion public var __nativeWindow:window.Window;
 	@:noCompletion public var __wgpuContext:WgpuContext;
 	@:noCompletion private var __attributes:WindowAttributes;
+	@:noCompletion private var __backend:WindowBackend;
+	@:noCompletion private var __inFrame:Bool = false;
+	@:noCompletion private var __alwaysOnTop:Bool = false;
+	@:noCompletion private var __appearance:WindowAppearance = System;
+	@:noCompletion private var __keyboardGrab:Bool = false;
+	@:noCompletion private var __mouseRect:Rectangle;
+	@:noCompletion private var __opacity:Float = 1.0;
+	@:noCompletion private var __minWidth:Int = 0;
+	@:noCompletion private var __minHeight:Int = 0;
+	@:noCompletion private var __maxWidth:Int = 0;
+	@:noCompletion private var __maxHeight:Int = 0;
+	@:noCompletion private var clickCount:Int = 0;
+	@:noCompletion private var __lastClickTime:Float = -1;
+	@:noCompletion private var __lastClickX:Float = 0;
+	@:noCompletion private var __lastClickY:Float = 0;
+	@:noCompletion private var __lastClickButton:MouseButton = LEFT;
 	@:noCompletion private var __cursor:MouseCursor = DEFAULT;
 	@:noCompletion private var __frameRate:Float = 60.0;
 	@:noCompletion private var __mouseLock:Bool = false;
@@ -123,6 +166,10 @@ class Window {
 
 		__wgpuContext = new WgpuContext(__nativeWindow, vsyncRequested(this.__attributes));
 		context = new RenderContext(this, __wgpuContext, this.__attributes);
+		__backend = new WindowBackend(this);
+		if (this.__attributes.alwaysOnTop == true) alwaysOnTop = true;
+		if (this.__attributes.appearance != null) appearance = this.__attributes.appearance;
+		if (this.__attributes.context != null && this.__attributes.context.vsyncMode != null) __wgpuContext.vsync = vsyncRequested(this.__attributes);
 	}
 
 	@:noCompletion public function __pollEvents():Bool {
@@ -162,6 +209,9 @@ class Window {
 					var ph = Std.int(Math.round(__nativeWindow.height() * sf));
 					__wgpuContext.configureSurface(pw, ph);
 					onResize.dispatch(pw, ph);
+					onDisplayScaleChange.dispatch();
+				case Occluded(occluded):
+					if (occluded) onHide.dispatch() else onShow.dispatch();
 				case RedrawRequested:
 					onExpose.dispatch();
 				case CursorEntered(_):
@@ -178,6 +228,13 @@ class Window {
 				case MouseInput(state, button, _):
 					var limeBtn = MouseButton.fromWindowMouseButton(button);
 					if (state == MouseElementState.Pressed) {
+						var now = haxe.Timer.stamp();
+						var near = Math.abs(__lastMouseX - __lastClickX) < 4 && Math.abs(__lastMouseY - __lastClickY) < 4;
+						clickCount = (limeBtn == __lastClickButton && near && now - __lastClickTime < 0.5) ? clickCount + 1 : 1;
+						__lastClickTime = now;
+						__lastClickX = __lastMouseX;
+						__lastClickY = __lastMouseY;
+						__lastClickButton = limeBtn;
 						onMouseDown.dispatch(__lastMouseX, __lastMouseY, limeBtn);
 					} else {
 						onMouseUp.dispatch(__lastMouseX, __lastMouseY, limeBtn);
@@ -257,8 +314,99 @@ class Window {
 			__wgpuContext.clear(0.0, 0.0, 0.0, 1.0);
 		}
 
+		__inFrame = true;
 		onRender.dispatch(context);
+		__inFrame = false;
 		__wgpuContext.endFrame();
+	}
+
+	public function setMinSize(width:Int, height:Int):Void {
+		__minWidth = width;
+		__minHeight = height;
+		if (__nativeWindow.valid()) __nativeWindow.setMinSize(width, height);
+	}
+
+	public function setMaxSize(width:Int, height:Int):Void {
+		__maxWidth = width;
+		__maxHeight = height;
+		if (__nativeWindow.valid()) __nativeWindow.setMaxSize(width, height);
+	}
+
+	public function setTextInputRect(value:Rectangle):Rectangle {
+		if (value != null && __nativeWindow.valid()) __nativeWindow.setImeCursorArea(value.x, value.y, value.width, value.height);
+		return value;
+	}
+
+	/** Reading the presented surface back is not supported yet; returns `null`. **/
+	public function readPixels(rect:Rectangle = null):Image {
+		return null;
+	}
+
+	public function toString():String {
+		return "[object Window]";
+	}
+
+	/** `vsyncMode` wins over the legacy `vsync`; either way the surface is reconfigured. **/
+	private function get_vsyncMode():VSyncMode return application != null ? application.vsyncMode : (__wgpuContext.vsync ? On : Off);
+	private function set_vsyncMode(v:VSyncMode):VSyncMode {
+		if (application != null) application.vsyncMode = v;
+		__wgpuContext.vsync = v != Off;
+		if (__nativeWindow.valid()) __wgpuContext.configureSurface(__nativeWindow.width(), __nativeWindow.height());
+		return v;
+	}
+
+	private function get_alwaysOnTop():Bool return __alwaysOnTop;
+	private function set_alwaysOnTop(v:Bool):Bool {
+		if (__nativeWindow.valid()) __nativeWindow.setWindowLevel(v ? WindowLevel.AlwaysOnTop : WindowLevel.Normal);
+		return __alwaysOnTop = v;
+	}
+
+	private function get_appearance():WindowAppearance return __appearance;
+	private function set_appearance(v:WindowAppearance):WindowAppearance {
+		if (__nativeWindow.valid()) __nativeWindow.setTheme(switch (v) {
+			case Light: Theme.Light;
+			case Dark: Theme.Dark;
+			default: null;
+		});
+		return __appearance = v;
+	}
+
+	private function get_effectiveAppearance():WindowAppearance {
+		if (__appearance != System || !__nativeWindow.valid()) return __appearance;
+		return __nativeWindow.theme() == Theme.Dark ? Dark : Light;
+	}
+
+	private function get_keyboardGrab():Bool return __keyboardGrab;
+	private function set_keyboardGrab(v:Bool):Bool return __keyboardGrab = v;
+	private function get_mouseRect():Rectangle return __mouseRect;
+	private function set_mouseRect(v:Rectangle):Rectangle return __mouseRect = v;
+	private function get_opacity():Float return __opacity;
+	private function set_opacity(v:Float):Float return __opacity = v;
+	private function get_minWidth():Int return __minWidth;
+	private function set_minWidth(v:Int):Int {
+		setMinSize(v, __minHeight);
+		return v;
+	}
+	private function get_minHeight():Int return __minHeight;
+	private function set_minHeight(v:Int):Int {
+		setMinSize(__minWidth, v);
+		return v;
+	}
+	private function get_maxWidth():Int return __maxWidth;
+	private function set_maxWidth(v:Int):Int {
+		setMaxSize(v, __maxHeight);
+		return v;
+	}
+	private function get_maxHeight():Int return __maxHeight;
+	private function set_maxHeight(v:Int):Int {
+		setMaxSize(__maxWidth, v);
+		return v;
+	}
+	private function get_transparent():Bool return __attributes.transparent == true;
+	private function get_visible():Bool return !hidden;
+	private function set_visible(v:Bool):Bool {
+		if (__nativeWindow.valid()) __nativeWindow.setVisible(v);
+		return v;
 	}
 
 	public function alert(message:String, title:String = null):Void {
@@ -344,8 +492,8 @@ class Window {
 	private function get_displayMode():DisplayMode return display.currentMode;
 	private function set_displayMode(v:DisplayMode):DisplayMode return v;
 
-	private function get_frameRate():Float return __frameRate;
-	private function set_frameRate(v:Float):Float return __frameRate = v;
+	private function get_frameRate():Float return application != null ? application.__getFrameRate() : __frameRate;
+	private function set_frameRate(v:Float):Float return application != null ? application.__setFrameRateFromWindow(v) : __frameRate = v;
 
 	private function get_fullscreen():Bool return __nativeWindow.valid() ? __nativeWindow.isFullscreen() : false;
 	private function set_fullscreen(v:Bool):Bool {
@@ -366,7 +514,10 @@ class Window {
 
 	private function get_maximized():Bool return __nativeWindow.valid() ? __nativeWindow.isMaximized() : false;
 	private function set_maximized(v:Bool):Bool {
-		if (__nativeWindow.valid()) __nativeWindow.setMaximized(v);
+		if (__nativeWindow.valid()) {
+			__nativeWindow.setMaximized(v);
+			if (v) onMaximize.dispatch();
+		}
 		return v;
 	}
 

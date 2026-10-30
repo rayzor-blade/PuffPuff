@@ -168,7 +168,8 @@ class Snapshot {
 			var parsed = Std.parseInt(envFrames);
 			if (parsed != null && parsed > 0) maxFrames = parsed;
 		}
-		app.exec(maxFrames);
+		puffpuff.app.ApplicationBackend.maxFrames = maxFrames;
+		app.exec();
 	}
 }
 

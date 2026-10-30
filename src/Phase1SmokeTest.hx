@@ -110,11 +110,11 @@ class Phase1SmokeTest extends Application {
 				title: "PuffPuff Phase 1 Smoke Test",
 				width: 640,
 				height: 360,
-				vsync: true,
-				background: 0xFF1A2B3C
+				context: {vsync: true, background: 0xFF1A2B3C}
 			}]
 		});
-		app.exec(3);
+		puffpuff.app.ApplicationBackend.maxFrames = 3;
+		app.exec();
 
 		Sys.println('Phase 1 unit + window/wgpu swapchain checks passed (t=${System.getTimer()}ms).');
 	}
