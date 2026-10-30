@@ -18,6 +18,12 @@ import puffpuff.gpu.WgpuContext;
 import puffpuff.snapshot.Snapshot;
 import puffpuff.text.FontAtlas;
 
+private enum LabelMode {
+	Cached;
+	Composed;
+	Native;
+}
+
 /** Every benchmark case. Names are `area.subject[.variant]`, and the area is the filter prefix. **/
 @:access(puffpuff.canvas.Canvas2D)
 class Cases {
@@ -398,7 +404,7 @@ class Cases {
 	}
 
 	/** Persistent offscreen context. A frame is begin, draw, end, and `readback` adds the copy to the CPU. **/
-	static function gpuFrame(name:String, readback:Bool, makeDraw:Void->(puffpuff.gpu.WgpuContext3D->Void), ?expect:Void->Null<String>):BenchCase {
+	static function gpuFrame(name:String, readback:Bool, makeDraw:Void->(puffpuff.gpu.WgpuContext3D->Void), ?expect:Void->Null<String>, stable = true):BenchCase {
 		var draw = makeDraw();
 		var off:puffpuff.snapshot.Offscreen = null, texture:gpu.GpuTexture = 0, view:gpu.GpuTextureView = 0, ctx:WgpuContext = null;
 		var pixels:Null<haxe.io.Bytes> = null;
@@ -436,7 +442,7 @@ class Cases {
 				}
 				return lit > 1000 ? null : 'frame looks empty ($lit sampled pixels differ from the clear colour)';
 			} : null,
-			checksum: readback ? () -> {
+			checksum: readback && stable ? () -> {
 				frame();
 				var hash = Harness.fnv(pixels, 0, pixels.length);
 				var dump = Sys.getEnv("BENCH_DUMP");
@@ -543,8 +549,11 @@ class Cases {
 		];
 	}
 
-	/** 200 labels drawn every frame: from runs shaped once (`cached`), or shaped again each frame as when the text changes. **/
-	static function labelsDraw(cached:Bool):Void->(puffpuff.gpu.WgpuContext3D->Void) {
+	/**
+		200 labels drawn every frame: from runs shaped once (`Cached`), or shaped again each frame as when the text
+		changes, composed from cached characters (`Composed`) or by the native engine alone (`Native`).
+	**/
+	static function labelsDraw(mode:LabelMode):Void->(puffpuff.gpu.WgpuContext3D->Void) {
 		return () -> {
 			var proj = new Matrix4();
 			proj.createOrtho(0, W, H, 0, -1, 1);
@@ -556,10 +565,11 @@ class Cases {
 				if (batcher == null) batcher = new QuadBatcher(c3, 4096);
 				var texture = atlas.upload(c3);
 				batcher.begin(texture);
+				atlas.composeRuns = mode != Native;
 				for (i in 0...LABELS) {
 					var x = (i % 4) * 128 + 4.0;
 					var y = Std.int(i / 4) * 10 + 14.0;
-					if (cached) {
+					if (mode == Cached) {
 						atlas.sync(c3);
 						var invW = 1.0 / texture.width, invH = 1.0 / texture.height;
 						for (g in runs[i].glyphs)
@@ -570,6 +580,7 @@ class Cases {
 						atlas.drawText(batcher, label(labelCounter++), x, y, 14.0, 0xFFFFFF, 1.0, style);
 					}
 				}
+				atlas.composeRuns = true;
 				batcher.flush(proj);
 			};
 		};
@@ -581,10 +592,12 @@ class Cases {
 			gpuFrame("gpu.frame.vectors.readback", true, vectorDraw, vectorsDrawn),
 			gpuFrame("gpu.frame.sprites.submit", false, spriteDraw),
 			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
-			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(true)),
-			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(true)),
-			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(false)),
-			gpuFrame("gpu.frame.text.dynamic.readback", true, labelsDraw(false))
+			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(Cached)),
+			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(Cached)),
+			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(Composed)),
+			gpuFrame("gpu.frame.text.dynamic.readback", true, labelsDraw(Composed), null, false),
+			gpuFrame("gpu.frame.text.dynamic.native.submit", false, labelsDraw(Native)),
+			gpuFrame("gpu.frame.text.dynamic.native.readback", true, labelsDraw(Native), null, false)
 		];
 	}
 }

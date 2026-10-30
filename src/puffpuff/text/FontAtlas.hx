@@ -36,6 +36,9 @@ class FontAtlas {
 	public var texture(default, null):Null<WgpuTexture>;
 	public var colorTexture(default, null):Null<WgpuTexture>;
 	public var revision(default, null):Int = 0;
+
+	/** How many times the native atlases were cleared. Glyph rectangles from before a clear are stale. **/
+	public var generation(get, never):Int;
 	public var colorRevision(default, null):Int = 0;
 
 	/** Lays out plain ASCII lines from cached per-character data; off, every string goes to the shaper. **/
@@ -51,6 +54,14 @@ class FontAtlas {
 	var rgbaPixels:Bytes = Bytes.alloc(0);
 	var seen:Int = 0;
 	var colorSeen:Int = 0;
+
+	function get_generation():Int {
+		#if hl
+		return TextNative.blinc_text_generation();
+		#else
+		return 0;
+		#end
+	}
 
 	public static function getDefault(context3D:WgpuContext3D = null):FontAtlas {
 		if (__defaultAtlas == null) {

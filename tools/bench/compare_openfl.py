@@ -23,16 +23,19 @@ def ms(name):
 
 
 rows = [
-    ("New 133-character paragraph: layout (OpenFL, with wrapping) or shaping (PuffPuff, one line)",
-     of["layout.paragraph.us"]["median"] / 1000, pp["text.shape.paragraph"]["medianNs"] / 1e6),
-    ("200 labels, static, per frame: PuffPuff submitted", of["frame.static.ms"]["median"], ms("gpu.frame.text.static.submit")),
-    ("200 labels, static, per frame: PuffPuff finished and read back", of["frame.static.ms"]["median"], ms("gpu.frame.text.static.readback")),
-    ("200 labels, text set every frame: PuffPuff submitted", of["frame.dynamic.ms"]["median"], ms("gpu.frame.text.dynamic.submit")),
-    ("200 labels, text set every frame: PuffPuff finished and read back", of["frame.dynamic.ms"]["median"], ms("gpu.frame.text.dynamic.readback")),
+    ("New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff)",
+     of["layout.paragraph.us"]["median"] / 1000, [("composed", ms("text.shape.paragraph")), ("native engine", ms("text.shape.paragraph.native"))]),
+    ("200 labels, static, per frame, PuffPuff submitted", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.submit"))]),
+    ("200 labels, static, per frame, PuffPuff finished and read back", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.readback"))]),
+    ("200 labels, text set every frame, PuffPuff submitted", of["frame.dynamic.ms"]["median"],
+     [("composed", ms("gpu.frame.text.dynamic.submit")), ("native engine", ms("gpu.frame.text.dynamic.native.submit"))]),
+    ("200 labels, text set every frame, PuffPuff finished and read back", of["frame.dynamic.ms"]["median"],
+     [("composed", ms("gpu.frame.text.dynamic.readback")), ("native engine", ms("gpu.frame.text.dynamic.native.readback"))]),
 ]
 print(f"OpenFL {of_meta['openfl']} on Lime {of_meta['lime']}, hxcpp {of_meta['hxcpp']} release, {of_meta['runs']} runs ({of_meta['date']}); "
       f"PuffPuff {pp_meta['commit']} on {pp_meta['ash']} ({pp_meta['mode']} tier); {pp_meta['cpu']}.\n")
 print("| Measurement | OpenFL (ms) | PuffPuff (ms) | PuffPuff is |")
 print("|---|---:|---:|---:|")
-for label, a, b in rows:
-    print(f"| {label} | {a:.3f} | {b:.3f} | {a / b:.1f}x faster |")
+for label, a, variants in rows:
+    for name, b in variants:
+        print(f"| {label}{' (' + name + ')' if name else ''} | {a:.3f} | {b:.3f} | {a / b:.1f}x faster |")

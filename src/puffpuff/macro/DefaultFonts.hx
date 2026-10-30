@@ -45,9 +45,10 @@ class DefaultFonts {
 			candidates.push(Path.join([envDir, "blinc_abi.hdll"]));
 			candidates.push(Path.join([envDir, "libblinc_abi.dylib"]));
 		}
-		candidates.push(Path.join([root, "..", "blinc_abi", "target", "debug", "libblinc_abi.dylib"]));
 		candidates.push(Path.join([root, "..", "blinc_abi", "target", "release", "libblinc_abi.dylib"]));
 		candidates.push(Path.join([root, "..", "ashui", "tools", "snapshot", "bin", "blinc_abi.hdll"]));
+		var debug = Path.join([root, "..", "blinc_abi", "target", "debug", "libblinc_abi.dylib"]);
+		candidates.push(debug);
 
 		for (src in candidates) {
 			if (FileSystem.exists(src)) {
@@ -55,6 +56,8 @@ class DefaultFonts {
 					FileSystem.createDirectory(outDir);
 				}
 				File.copy(src, dest);
+				if (src == debug)
+					Context.warning("blinc_abi is a debug build, far slower than release: build it with `cargo build --release` in ../blinc_abi", Context.currentPos());
 				return;
 			}
 		}

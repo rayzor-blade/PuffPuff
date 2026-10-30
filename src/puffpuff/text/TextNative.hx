@@ -35,6 +35,11 @@ extern class TextNative {
 	 * Returns total `f32`s (`glyphCount * 9`).
 	 */
 	static function blinc_text_prepare(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes):Int;
+
+	/**
+	 * How many times the glyph atlases were cleared to make room. A glyph rectangle taken before a clear is stale after it.
+	 */
+	static function blinc_text_generation():Int;
 }
 
 class TextUtf8 {

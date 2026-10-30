@@ -66,16 +66,12 @@ class StyleSlot {
 	array reads, not shaping. A run that needs the shaper (a ligature or a character outside ASCII) is left to the
 	engine: `compose` says no.
 
-	The cache holds atlas rectangles, so it is dropped when the atlas is seen to have been cleared: a glyph kept as a
-	canary is shaped again every so often and compared with what it was.
+	The cache holds atlas rectangles, so it is dropped whenever the native atlases have been cleared (`FontAtlas.generation`).
 **/
 class RunComposer {
-	static inline var CHECK_SECONDS = 0.05;
-
 	final atlas:FontAtlas;
 	final slots:Array<StyleSlot> = [];
-	var canary:Null<PreparedGlyph>;
-	var lastCheck = 0.0;
+	var generation = -1;
 
 	/** How many times the cache was dropped because the atlas had been cleared. **/
 	public var drops(default, null) = 0;
@@ -112,21 +108,15 @@ class RunComposer {
 		return slot;
 	}
 
-	/** Drops the cache if the atlas has been cleared since the canary was shaped. **/
+	/** Drops the cache if the atlases have been cleared since it was filled. **/
 	function check():Void {
-		var now = haxe.Timer.stamp();
-		if (canary != null && now - lastCheck < CHECK_SECONDS)
+		var now = atlas.generation;
+		if (now == generation)
 			return;
-		lastCheck = now;
-		var run = atlas.prepareNative("·", {size: 16.0, family: "Arimo"});
-		var g = run.glyphs.length > 0 ? run.glyphs[0] : null;
-		if (g == null)
-			return;
-		if (canary != null && (canary.u0 != g.u0 || canary.v0 != g.v0 || canary.u1 != g.u1 || canary.v1 != g.v1)) {
-			slots.resize(0);
+		if (slots.length > 0)
 			drops++;
-		}
-		canary = g;
+		slots.resize(0);
+		generation = now;
 	}
 
 	function learn(slot:StyleSlot, i:Int):Void {
