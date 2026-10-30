@@ -1,184 +1,727 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.utils;
 
-import haxe.io.Bytes;
+import haxe.io.Path;
+import haxe.CallStack;
+import haxe.Unserializer;
+import lime.app.Application;
 import lime.app.Event;
+import lime.app.Promise;
 import lime.app.Future;
-import lime.graphics.Image;
 import lime.media.AudioBuffer;
+import lime.graphics.Image;
 import lime.text.Font;
+import lime.utils.Bytes;
+import lime.utils.Log;
+#if !macro
+import haxe.Json;
+#end
 
+@:access(lime.media.AudioBuffer)
 /**
- * Lime Assets facade backed by `ash-future`, `hlavi`, and `puffpuff.snapshot.Png`.
+ * <p>The Assets class provides a cross-platform interface to access
+ * embedded images, fonts, sounds and other resource files.</p>
+ *
+ * <p>The contents are populated automatically when an application
+ * is compiled using the Lime command-line tools, based on the
+ * contents of the project file.</p>
+ *
+ * <p>For most platforms, the assets are included in the same directory
+ * or package as the application, and the paths are handled
+ * automatically. For web content, the assets are preloaded before
+ * the start of the rest of the application.</p>
  */
-class Assets {
+#if !lime_debug
+@:fileXml('tags="haxe,release"')
+@:noDebug
+#end
+@:access(lime.utils.AssetLibrary)
+class Assets
+{
 	public static var cache:AssetCache = new AssetCache();
 	public static var onChange = new Event<Void->Void>();
 
-	private static var __assetPaths:Map<String, String> = new Map<String, String>();
-	private static var __assetTypes:Map<String, AssetType> = new Map<String, AssetType>();
-	private static var __libraries:Map<String, AssetLibrary> = new Map<String, AssetLibrary>();
+	private static var bundlePaths = new Map<String, String>();
+	private static var libraries(default, null) = new Map<String, AssetLibrary>();
+	private static var libraryPaths = new Map<String, String>();
 
-	public static function registerPath(id:String, path:String, type:AssetType = null):Void {
-		__assetPaths.set(id, path);
-		if (type != null) __assetTypes.set(id, type);
-	}
-
-	public static function registerLibrary(name:String, library:AssetLibrary):Void {
-		if (name == null || name == "") name = "default";
-		__libraries.set(name, library);
-	}
-
-	public static function getLibrary(name:String):AssetLibrary {
-		if (name == null || name == "") name = "default";
-		return __libraries.get(name);
-	}
-
-	public static function loadLibrary(name:String):Future<AssetLibrary> {
-		var lib = getLibrary(name);
-		if (lib != null) return lib.load();
-		return Future.withValue(new AssetLibrary());
-	}
-
-	public static function unloadLibrary(name:String):Void {
-		if (name == null || name == "") name = "default";
-		var lib = __libraries.get(name);
-		if (lib != null) {
-			lib.unload();
-			__libraries.remove(name);
+	public static function exists(id:String, type:AssetType = null):Bool
+	{
+		#if (tools && !display)
+		if (type == null)
+		{
+			type = BINARY;
 		}
+
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			return symbol.exists(type);
+		}
+		#end
+
+		return false;
 	}
 
-	public static function getPath(id:String):String {
-		return resolvePath(id);
-	}
+	/**
+	 * Gets an instance of a cached or embedded asset
+	 * @usage		var sound = Assets.getAsset("sound.wav", SOUND);
+	 * @param	id		The ID or asset path for the asset
+	 * @return		An Asset object, or null.
+	 */
+	public static function getAsset(id:String, type:AssetType, useCache:Bool):Dynamic
+	{
+		#if (tools && !display)
+		if (useCache && cache.enabled)
+		{
+			switch (type)
+			{
+				case BINARY, TEXT: // Not cached
 
-	public static function isLocal(id:String, type:AssetType = null, useCache:Bool = true):Bool {
-		return true;
-	}
+					useCache = false;
 
-	public static function list(type:AssetType = null):Array<String> {
-		var items:Array<String> = [];
-		for (id in __assetPaths.keys()) {
-			if (type == null || __assetTypes.get(id) == type) {
-				items.push(id);
+				case FONT:
+					var font = cache.font.get(id);
+
+					if (font != null)
+					{
+						return font;
+					}
+
+				case IMAGE:
+					var image = cache.image.get(id);
+
+					if (isValidImage(image))
+					{
+						return image;
+					}
+
+				case MUSIC, SOUND:
+					var audio = cache.audio.get(id);
+
+					if (isValidAudio(audio))
+					{
+						return audio;
+					}
+
+				case TEMPLATE:
+					throw "Not sure how to get template: " + id;
+
+				default:
+					return null;
 			}
 		}
-		for (lib in __libraries) {
-			for (id in lib.list(type)) {
-				if (items.indexOf(id) < 0) items.push(id);
+
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			if (symbol.exists(type))
+			{
+				if (symbol.isLocal(type))
+				{
+					var asset = symbol.library.getAsset(symbol.symbolName, type);
+
+					if (useCache && cache.enabled)
+					{
+						cache.set(id, type, asset);
+					}
+
+					return asset;
+				}
+				else
+				{
+					Log.error(type + " asset \"" + id + "\" exists, but only asynchronously");
+				}
+			}
+			else
+			{
+				Log.error("There is no " + type + " asset with an ID of \"" + id + "\"");
 			}
 		}
+		else
+		{
+			Log.error(__libraryNotFound(symbol.libraryName));
+		}
+		#end
+
+		return null;
+	}
+
+	/**
+	 * Gets an instance of an embedded sound
+	 * @usage		var sound = Assets.getAudioBuffer ("sound.wav");
+	 * @param	id		The ID or asset path for the sound
+	 * @return		A new Sound object
+	 */
+	public static function getAudioBuffer(id:String, useCache:Bool = true):AudioBuffer
+	{
+		return cast getAsset(id, SOUND, useCache);
+	}
+
+	public static function getAudioBufferStream(id:String, useCache:Bool = true):AudioBuffer
+	{
+		#if (tools && !display && !macro)
+		var type:AssetType = SOUND;
+
+		if (useCache && cache.enabled)
+		{
+			var audio = cache.audio.get(id);
+
+			if (isValidAudio(audio))
+			{
+				return audio;
+			}
+		}
+
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			if (symbol.exists(type))
+			{
+				if (symbol.isLocal(type))
+				{
+					var asset = symbol.library.getAudioBufferStream(symbol.symbolName);
+
+					if (useCache && cache.enabled)
+					{
+						cache.set(id, type, asset);
+					}
+
+					return asset;
+				}
+				else
+				{
+					Log.error(type + " asset \"" + id + "\" exists, but only asynchronously");
+				}
+			}
+			else
+			{
+				Log.error("There is no " + type + " asset with an ID of \"" + id + "\"");
+			}
+		}
+		else
+		{
+			Log.error(__libraryNotFound(symbol.libraryName));
+		}
+		#end
+
+		return null;
+	}
+
+	/**
+	 * Gets an instance of an embedded binary asset
+	 * @usage		var bytes = Assets.getBytes("file.zip");
+	 * @param	id		The ID or asset path for the file
+	 * @return		A new Bytes object
+	 */
+	public static function getBytes(id:String):Bytes
+	{
+		return cast getAsset(id, BINARY, false);
+	}
+
+	/**
+	 * Gets an instance of an embedded font
+	 * @usage		var fontName = Assets.getFont("font.ttf").fontName;
+	 * @param	id		The ID or asset path for the font
+	 * @return		A new Font object
+	 */
+	public static function getFont(id:String, useCache:Bool = true):Font
+	{
+		return getAsset(id, FONT, useCache);
+	}
+
+	/**
+	 * Gets an instance of an embedded bitmap.
+	 *
+	 * _Note:_ This method may behave differently, depending on the target
+	 * platform. On targets that can quickly create a new image synchronously,
+	 * every call to `Assets.getImage()` with the same ID will return a new
+	 * `Image` instance. However, on other targets where creating images
+	 * synchronously is unacceptably slow, or where images may not be created
+	 * synchronously and must be created asynchronously, every call to
+	 * `Assets.getImage()` with the same ID may return a single, shared `Image`
+	 * instance.
+	 *
+	 * With that in mind, modifying or disposing the contents of the `Image`
+	 * returned by `Assets.getImage()` may affect the results of future calls to
+	 * Assets.getImage()` on some targets. To access an `Image` instance that
+	 * may be modified without affecting future calls to `Assets.getImage()`,
+	 * call the `Image` instance's `clone()` method to manually create a copy.
+	 *
+	 * @usage		var bitmap = new Bitmap(Assets.getBitmapData("image.jpg"));
+	 * @param	id		The ID or asset path for the bitmap
+	 * @param	useCache		(Optional) Whether to use BitmapData from the cache(Default: true)
+	 * @return		A new BitmapData object
+	 */
+	public static function getImage(id:String, useCache:Bool = true):Image
+	{
+		return getAsset(id, IMAGE, useCache);
+	}
+
+	public static function getLibrary(name:String):AssetLibrary
+	{
+		if (name == null || name == "")
+		{
+			name = "default";
+		}
+
+		return libraries.get(name);
+	}
+
+	/**
+	 * Gets the file path (if available) for an asset
+	 * @usage		var path = Assets.getPath("image.jpg");
+	 * @param	id		The ID or asset path for the asset
+	 * @return		The path to the asset (or null)
+	 */
+	public static function getPath(id:String):String
+	{
+		#if (tools && !display)
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			if (symbol.exists())
+			{
+				return symbol.library.getPath(symbol.symbolName);
+			}
+			else
+			{
+				Log.error("There is no asset with an ID of \"" + id + "\"");
+			}
+		}
+		else
+		{
+			Log.error(__libraryNotFound(symbol.libraryName));
+		}
+		#end
+
+		return null;
+	}
+
+	/**
+	 * Gets an instance of an embedded text asset
+	 * @usage		var text = Assets.getText("text.txt");
+	 * @param	id		The ID or asset path for the file
+	 * @return		A new String object
+	 */
+	public static function getText(id:String):String
+	{
+		return getAsset(id, TEXT, false);
+	}
+
+	public static function hasLibrary(name:String):Bool
+	{
+		if (name == null || name == "")
+		{
+			name = "default";
+		}
+
+		return libraries.exists(name);
+	}
+
+	public static function isLocal(id:String, type:AssetType = null, useCache:Bool = true):Bool
+	{
+		#if (tools && !display)
+		if (useCache && cache.enabled)
+		{
+			if (cache.exists(id, type)) return true;
+		}
+
+		var symbol = new LibrarySymbol(id);
+		return symbol.library != null && symbol.isLocal(type);
+		#else
+		return false;
+		#end
+	}
+
+	private static function isValidAudio(buffer:AudioBuffer):Bool
+	{
+		return (buffer != null && !buffer.__isDisposed);
+	}
+
+	private static function isValidImage(image:Image):Bool
+	{
+		// TODO: Check disposed
+
+		return (image != null && image.buffer != null);
+	}
+
+	public static function list(type:AssetType = null):Array<String>
+	{
+		var items = [];
+
+		for (library in libraries)
+		{
+			var libraryItems = library.list(type);
+
+			if (libraryItems != null)
+			{
+				items = items.concat(libraryItems);
+			}
+		}
+
 		return items;
 	}
 
-	private static function resolvePath(id:String):String {
-		if (__assetPaths.exists(id)) return __assetPaths.get(id);
-		var colon = id != null ? id.indexOf(":") : -1;
-		if (colon > 0) {
-			var libName = id.substr(0, colon);
-			var sym = id.substr(colon + 1);
-			var lib = __libraries.get(libName);
-			if (lib != null) return lib.getPath(sym);
-		}
-		var defaultLib = __libraries.get("default");
-		if (defaultLib != null && defaultLib.exists(id, null)) {
-			return defaultLib.getPath(id);
-		}
-		return id;
-	}
+	public static function loadAsset(id:String, type:AssetType, useCache:Bool):Future<Dynamic>
+	{
+		#if (tools && !display)
+		if (useCache && cache.enabled)
+		{
+			switch (type)
+			{
+				case BINARY, TEXT: // Not cached
 
-	public static function exists(id:String, type:AssetType = null):Bool {
-		var path = resolvePath(id);
-		return path != null && sys.FileSystem.exists(path);
-	}
+					useCache = false;
 
-	public static function getBytes(id:String):Bytes {
-		var path = resolvePath(id);
-		if (path == null || !sys.FileSystem.exists(path)) return null;
-		return sys.io.File.getBytes(path);
-	}
+				case FONT:
+					var font = cache.font.get(id);
 
-	public static function getText(id:String):String {
-		var path = resolvePath(id);
-		if (path == null || !sys.FileSystem.exists(path)) return null;
-		return sys.io.File.getContent(path);
-	}
+					if (font != null)
+					{
+						return Future.withValue(font);
+					}
 
-	public static function getImage(id:String, useCache:Bool = true):Image {
-		if (useCache && cache.enabled && cache.image.exists(id)) {
-			return cache.image.get(id);
-		}
-		var image = Image.fromFile(resolvePath(id));
-		if (image != null && useCache && cache.enabled) {
-			cache.image.set(id, image);
-		}
-		return image;
-	}
+				case IMAGE:
+					var image = cache.image.get(id);
 
-	public static function getAudioBuffer(id:String, useCache:Bool = true):AudioBuffer {
-		if (useCache && cache.enabled && cache.audio.exists(id)) {
-			return cache.audio.get(id);
-		}
-		var buf = AudioBuffer.fromFile(resolvePath(id));
-		if (buf != null && useCache && cache.enabled) {
-			cache.audio.set(id, buf);
-		}
-		return buf;
-	}
+					if (isValidImage(image))
+					{
+						return Future.withValue(image);
+					}
 
-	public static function getFont(id:String, useCache:Bool = true):Font {
-		if (useCache && cache.enabled && cache.font.exists(id)) {
-			return cache.font.get(id);
-		}
-		var font = Font.fromFile(resolvePath(id));
-		if (font != null && useCache && cache.enabled) {
-			cache.font.set(id, font);
-		}
-		return font;
-	}
+				case MUSIC, SOUND:
+					var audio = cache.audio.get(id);
 
-	public static function loadBytes(id:String):Future<Bytes> {
-		return new Future<Bytes>(() -> getBytes(id), true);
-	}
+					if (isValidAudio(audio))
+					{
+						return Future.withValue(audio);
+					}
 
-	public static function loadText(id:String):Future<String> {
-		return new Future<String>(() -> getText(id), true);
-	}
+				case TEMPLATE:
+					throw "Not sure how to get template: " + id;
 
-	public static function loadImage(id:String, useCache:Bool = true):Future<Image> {
-		if (useCache && cache.enabled && cache.image.exists(id)) {
-			return Future.withValue(cache.image.get(id));
-		}
-		return Image.loadFromFile(resolvePath(id)).then(img -> {
-			if (img != null && useCache && cache.enabled) {
-				cache.image.set(id, img);
+				default:
+					return null;
 			}
-			return Future.withValue(img);
-		});
+		}
+
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			if (symbol.exists(type))
+			{
+				var future = symbol.library.loadAsset(symbol.symbolName, type);
+
+				if (useCache && cache.enabled)
+				{
+					future.onComplete(function(asset) cache.set(id, type, asset));
+				}
+
+				return future;
+			}
+			else
+			{
+				return Future.withError("There is no " + type + " asset with an ID of \"" + id + "\"");
+			}
+		}
+		else
+		{
+			return Future.withError(__libraryNotFound(symbol.libraryName));
+		}
+		#else
+		return null;
+		#end
 	}
 
-	public static function loadAudioBuffer(id:String, useCache:Bool = true):Future<AudioBuffer> {
-		if (useCache && cache.enabled && cache.audio.exists(id)) {
-			return Future.withValue(cache.audio.get(id));
-		}
-		return AudioBuffer.loadFromFile(resolvePath(id)).then(buf -> {
-			if (buf != null && useCache && cache.enabled) {
-				cache.audio.set(id, buf);
-			}
-			return Future.withValue(buf);
-		});
+	public static function loadAudioBuffer(id:String, useCache:Bool = true):Future<AudioBuffer>
+	{
+		return cast loadAsset(id, SOUND, useCache);
 	}
 
-	public static function loadFont(id:String, useCache:Bool = true):Future<Font> {
-		if (useCache && cache.enabled && cache.font.exists(id)) {
-			return Future.withValue(cache.font.get(id));
-		}
-		return Font.loadFromFile(resolvePath(id)).then(f -> {
-			if (f != null && useCache && cache.enabled) {
-				cache.font.set(id, f);
+	public static function loadAudioBufferStream(id:String, useCache:Bool = true):Future<AudioBuffer>
+	{
+		#if (tools && !display && !macro)
+		var type:AssetType = SOUND;
+
+		if (useCache && cache.enabled)
+		{
+			var audio = cache.audio.get(id);
+
+			if (isValidAudio(audio))
+			{
+				return Future.withValue(audio);
 			}
-			return Future.withValue(f);
-		});
+		}
+
+		var symbol = new LibrarySymbol(id);
+
+		if (symbol.library != null)
+		{
+			if (symbol.exists(type))
+			{
+				var future = symbol.library.loadAudioBufferStream(symbol.symbolName);
+
+				if (useCache && cache.enabled)
+				{
+					future.onComplete(function(asset) cache.set(id, type, asset));
+				}
+
+				return future;
+			}
+			else
+			{
+				return cast Future.withError("There is no " + type + " asset with an ID of \"" + id + "\"");
+			}
+		}
+		else
+		{
+			return cast Future.withError(__libraryNotFound(symbol.libraryName));
+		}
+		#else
+		return null;
+		#end
 	}
+
+	public static function loadBytes(id:String):Future<Bytes>
+	{
+		return cast loadAsset(id, BINARY, false);
+	}
+
+	public static function loadFont(id:String, useCache:Bool = true):Future<Font>
+	{
+		return cast loadAsset(id, FONT, useCache);
+	}
+
+	public static function loadImage(id:String, useCache:Bool = true):Future<Image>
+	{
+		return cast loadAsset(id, IMAGE, useCache);
+	}
+
+	public static function loadLibrary(id:String):Future<AssetLibrary>
+	{
+		var promise = new Promise<AssetLibrary>();
+
+		#if (tools && !display && !macro)
+		var library = getLibrary(id);
+
+		if (library != null)
+		{
+			return library.load();
+		}
+
+		var path = id;
+		var rootPath = null;
+
+		if (bundlePaths.exists(id))
+		{
+			AssetBundle.loadFromFile(bundlePaths.get(id)).onComplete(function(bundle)
+			{
+				if (bundle == null)
+				{
+					promise.error("Cannot load bundle for library \"" + id + "\"");
+					return;
+				}
+
+				var library = AssetLibrary.fromBundle(bundle);
+
+				if (library == null)
+				{
+					promise.error("Cannot open library \"" + id + "\"");
+				}
+				else
+				{
+					libraries.set(id, library);
+					library.onChange.add(onChange.dispatch);
+					promise.completeWith(library.load());
+				}
+			}).onError(function(error)
+			{
+					promise.error("Unable to load asset library \"" + id + "\" from bundle \"" + bundlePaths.get(id) + "\": " + Std.string(error) + ". Verify that the bundle exists and is readable.");
+			});
+		}
+		else
+		{
+			if (libraryPaths.exists(id))
+			{
+				path = libraryPaths[id];
+				rootPath = Path.directory(path);
+			}
+			else
+			{
+				if (StringTools.endsWith(path, ".bundle"))
+				{
+					rootPath = path;
+					path += "/library.json";
+				}
+				else
+				{
+					rootPath = Path.directory(path);
+				}
+				path = __cacheBreak(path);
+			}
+
+			AssetManifest.loadFromFile(path, rootPath).onComplete(function(manifest)
+			{
+				if (manifest == null)
+				{
+					promise.error("Cannot parse asset manifest for library \"" + id + "\"");
+					return;
+				}
+
+				var library = AssetLibrary.fromManifest(manifest);
+
+				if (library == null)
+				{
+					promise.error("Cannot open library \"" + id + "\"");
+				}
+				else
+				{
+					libraries.set(id, library);
+					library.onChange.add(onChange.dispatch);
+					promise.completeWith(library.load());
+				}
+			}).onError(function(error)
+			{
+					promise.error("Unable to load asset library \"" + id + "\" from manifest \"" + path + "\" (root \"" + rootPath + "\"): " + Std.string(error) + ". Verify that the manifest and its packaged assets exist relative to this path.");
+			});
+		}
+		#end
+
+		return promise.future;
+	}
+
+	public static function loadText(id:String):Future<String>
+	{
+		return cast loadAsset(id, TEXT, false);
+	}
+
+	public static function registerLibrary(name:String, library:AssetLibrary):Void
+	{
+		if (name == null || name == "")
+		{
+			name = "default";
+		}
+
+		if (libraries.exists(name))
+		{
+			if (libraries.get(name) == library)
+			{
+				return;
+			}
+			else
+			{
+				unloadLibrary(name);
+			}
+		}
+
+		if (library != null)
+		{
+			library.onChange.add(library_onChange);
+		}
+
+		libraries.set(name, library);
+	}
+
+	public static function unloadLibrary(name:String):Void
+	{
+		removeLibrary(name, true);
+	}
+
+	public static function removeLibrary(name:String, unload:Bool = true):Void
+	{
+		#if (tools && !display)
+		if (name == null || name == "")
+		{
+			name = "default";
+		}
+
+		var library = libraries.get(name);
+
+		if (library != null)
+		{
+			cache.clear(name + ":");
+			library.onChange.remove(library_onChange);
+			if (unload)
+			{
+				library.unload();
+			}
+		}
+
+		libraries.remove(name);
+		#end
+	}
+
+	@:noCompletion private static function __cacheBreak(path:String):String
+	{
+		#if web
+		if (cache.version > 0)
+		{
+			if (path.indexOf("?") > -1)
+			{
+				path += "&" + cache.version;
+			}
+			else
+			{
+				path += "?" + cache.version;
+			}
+		}
+		#end
+
+		return path;
+	}
+
+	@:noCompletion private static function __libraryNotFound(name:String):String
+	{
+		if (name == null || name == "")
+		{
+			name = "default";
+		}
+
+		if (Application.current != null && Application.current.preloader != null && !Application.current.preloader.complete)
+		{
+			return "There is no asset library named \"" + name + "\", or it is not yet preloaded";
+		}
+		else
+		{
+			return "There is no asset library named \"" + name + "\"";
+		}
+	}
+
+	// Event Handlers
+	@:noCompletion private static function library_onChange():Void
+	{
+		cache.clear();
+		onChange.dispatch();
+	}
+}
+
+#if !lime_debug
+@:fileXml('tags="haxe,release"')
+@:noDebug
+#end
+private class LibrarySymbol
+{
+	public var library(default, null):AssetLibrary;
+	public var libraryName(default, null):String;
+	public var symbolName(default, null):String;
+
+	public inline function new(id:String)
+	{
+		var colonIndex = id.indexOf(":");
+		libraryName = id.substring(0, colonIndex);
+		symbolName = id.substring(colonIndex + 1);
+		library = Assets.getLibrary(libraryName);
+	}
+
+	public inline function isLocal(?type)
+		return library.isLocal(symbolName, type);
+
+	public inline function exists(?type)
+		return library.exists(symbolName, type);
 }
