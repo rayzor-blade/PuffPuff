@@ -14,6 +14,8 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 			color:Vec4
 		};
 		@param var projection:Mat4;
+		/** 1 when the texture is premultiplied, so the tint and alpha scale the color too. **/
+		@param var premultiplied:Float;
 		@param var bitmap:Sampler2D;
 		@param var instances:StorageBuffer<Vec4>;
 		var vUv:Vec2;
@@ -65,7 +67,10 @@ class InstancedQuadShader implements hlwgpu.hxsl.Shader {
 				if (tex.a < 0.45) discard;
 				tex.a = 1.0;
 			}
-			output.color = tex * vColor;
+			var shaded = tex * vColor;
+			if (premultiplied > 0.5)
+				shaded = vec4(shaded.rgb * vColor.a, shaded.a);
+			output.color = shaded;
 		}
 	};
 }

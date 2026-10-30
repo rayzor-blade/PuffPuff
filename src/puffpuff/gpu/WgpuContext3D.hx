@@ -317,6 +317,9 @@ class WgpuContext3D {
 
 	// Tracked Context3D state
 	public var blendEnabled:Bool = true;
+
+	/** Whether the next `drawQuadsInstanced` texture is premultiplied. Set the blend factors to match. **/
+	public var quadsPremultiplied:Bool = false;
 	public var srcRgb:BlendFactor = BlendFactor.SrcAlpha;
 	public var dstRgb:BlendFactor = BlendFactor.OneMinusSrcAlpha;
 	public var opRgb:BlendOperation = BlendOperation.Add;
@@ -647,6 +650,7 @@ class WgpuContext3D {
 		var uboSize = InstancedQuadShader.PARAMS_SIZE;
 		var uboBytes = Bytes.alloc(uboSize);
 		uboBytes.blit(0, projection.buffer, projection.byteOffset, 64);
+		uboBytes.setFloat(InstancedQuadShader.PARAMS_premultiplied, quadsPremultiplied ? 1.0 : 0.0);
 		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
 		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
 
