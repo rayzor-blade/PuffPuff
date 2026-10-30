@@ -13,10 +13,10 @@ import argparse, json, os, re, sys, warnings
 # Upstream types this backend replaces rather than ports: it has no OpenGL, Cairo, OpenAL or
 # HarfBuzz, and no per-API render contexts (`RenderContext` itself is kept).
 OUT_OF_SCOPE = (
-    "lime.graphics.opengl.", "lime.media.openal.", "lime.media.howlerjs.",
+    "lime.graphics.opengl.", "lime.graphics.cairo.", "lime.media.openal.", "lime.media.howlerjs.",
     "lime.text.harfbuzz.", "lime.media.vorbis.", "lime.net.curl.", "lime.net.oauth.",
     "lime.graphics.Canvas2DRenderContext", "lime.graphics.DOMRenderContext",
-    "lime.graphics.FlashRenderContext", "lime.graphics.OpenGL", "lime.graphics.GL", "lime.graphics.VulkanRenderContext",
+    "lime.graphics.CairoRenderContext", "lime.graphics.FlashRenderContext", "lime.graphics.OpenGL", "lime.graphics.GL", "lime.graphics.VulkanRenderContext",
     "lime.graphics.WebGL", "lime.media.FlashAudioContext", "lime.media.HTML5AudioContext",
     "lime.media.WebAudioContext", "lime.media.OpenALAudioContext", "lime.system.JNI", "lime.system.CFFI",
     "lime._internal.backend.", "lime._internal.macros.", "lime.tools.", "lime.graphics.vulkan.",
