@@ -41,15 +41,17 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 			var head = paints[at];
 			var color = paints[at + 3];
 			if (head.x > 0.5) {
-				var geo = paints[at + 1];
+				var map = paints[at + 1];
 				var offsets = paints[at + 2];
-				var t = 0.0;
-				if (head.x < 1.5) {
-					var d = geo.zw - geo.xy;
-					t = dot(pixel - geo.xy, d) / max(dot(d, d), 0.000001);
-				} else {
-					t = length(pixel - geo.xy) / max(geo.z, 0.000001);
-				}
+				var origin = paints[at + 7];
+				var u = vec2(map.x * pixel.x + map.z * pixel.y + origin.x, map.y * pixel.x + map.w * pixel.y + origin.y);
+				var t = u.x;
+				if (head.x > 1.5)
+					t = length(u);
+				if (origin.z > 1.5)
+					t = t - floor(t);
+				else if (origin.z > 0.5)
+					t = 1.0 - abs(t - 2.0 * floor(t * 0.5) - 1.0);
 				t = clamp(t, 0.0, 1.0);
 				var p0 = premultiplied(paints[at + 3]);
 				var p1 = premultiplied(paints[at + 4]);

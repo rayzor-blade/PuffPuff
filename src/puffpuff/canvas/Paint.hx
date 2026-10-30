@@ -13,11 +13,13 @@ enum abstract PaintKind(Int) to Int {
 /**
  * Fill color source. Encoded as `RECORD_FLOATS` (8 × vec4) for `VectorPathShader`:
  *   0: kind, stopCount, opacity, 0
- *   1: geometry in target pixels — linear `x0, y0, x1, y1`; radial `cx, cy, r, 0`
+ *   1: `a, b, c, d` of the map from target pixels to gradient space
  *   2: stop offsets (≤ 4)
  *   3..6: stop colors, straight RGBA (solid uses 3)
- *   7: reserved
- * Gradient geometry is in path units and goes through the draw transform at encode time.
+ *   7: `e, f` of that map, spread (0 pad, 1 reflect, 2 repeat), 0
+ * Gradient space is where the gradient's parameter is read off directly: linear `t = x`, radial
+ * `t = length`. The map is built from path units through the draw transform at encode time, so a
+ * gradient can be stretched, rotated and skewed with its shape.
  */
 class Paint {
 	public static inline var RECORD_VEC4 = 8;
@@ -26,12 +28,18 @@ class Paint {
 	public var kind:PaintKind;
 	public var rgb:Int;
 	public var alpha:Float;
-	public var x0:Float = 0;
-	public var y0:Float = 0;
-	public var x1:Float = 0;
-	public var y1:Float = 0;
-	public var radius:Float = 0;
 	public var stops:Array<GradientStop>;
+
+	/** Path units → gradient space, as an `Affine`'s `a, b, c, d, e, f`. **/
+	public var ma:Float = 1;
+	public var mb:Float = 0;
+	public var mc:Float = 0;
+	public var md:Float = 1;
+	public var me:Float = 0;
+	public var mf:Float = 0;
+
+	/** 0 pad, 1 reflect, 2 repeat. **/
+	public var spread:Int = 0;
 
 	function new(kind:PaintKind, rgb:Int, alpha:Float, ?stops:Array<GradientStop>) {
 		this.kind = kind;
@@ -43,20 +51,46 @@ class Paint {
 	public static function solid(rgb:Int, alpha = 1.0):Paint
 		return new Paint(Solid, rgb, alpha);
 
-	public static function linear(x0:Float, y0:Float, x1:Float, y1:Float, stops:Array<GradientStop>):Paint {
+	/** From `(x0, y0)` (offset 0) to `(x1, y1)` (offset 1), in path units. **/
+	public static function linear(x0:Float, y0:Float, x1:Float, y1:Float, stops:Array<GradientStop>, spread = 0):Paint {
 		var p = new Paint(Linear, 0, 1, sorted(stops));
-		p.x0 = x0;
-		p.y0 = y0;
-		p.x1 = x1;
-		p.y1 = y1;
+		var dx = x1 - x0, dy = y1 - y0;
+		var l = Math.max(dx * dx + dy * dy, 1e-12);
+		p.ma = dx / l;
+		p.mc = dy / l;
+		p.me = -(dx * x0 + dy * y0) / l;
+		p.spread = spread;
 		return p;
 	}
 
-	public static function radial(cx:Float, cy:Float, r:Float, stops:Array<GradientStop>):Paint {
+	/** Offset 1 is at distance `r` from `(cx, cy)`, in path units. **/
+	public static function radial(cx:Float, cy:Float, r:Float, stops:Array<GradientStop>, spread = 0):Paint {
 		var p = new Paint(Radial, 0, 1, sorted(stops));
-		p.x0 = cx;
-		p.y0 = cy;
-		p.radius = r;
+		var k = 1 / Math.max(r, 1e-9);
+		p.ma = k;
+		p.md = k;
+		p.me = -cx * k;
+		p.mf = -cy * k;
+		p.spread = spread;
+		return p;
+	}
+
+	/**
+		A gradient placed by `box`, which maps gradient space onto path units. Linear runs from `(0, 0)` to `(1, 0)`, radial
+		from the center `(0, 0)` out to the unit circle. Any affine map works, so ellipses and rotations are covered.
+	**/
+	public static function boxed(kind:PaintKind, box:Affine, stops:Array<GradientStop>, spread = 0):Paint {
+		var p = new Paint(kind, 0, 1, sorted(stops));
+		var inverse = box.inverse();
+		if (inverse != null) {
+			p.ma = inverse.a;
+			p.mb = inverse.b;
+			p.mc = inverse.c;
+			p.md = inverse.d;
+			p.me = inverse.e;
+			p.mf = inverse.f;
+		}
+		p.spread = spread;
 		return p;
 	}
 
@@ -87,16 +121,22 @@ class Paint {
 		}
 		var n = Std.int(Math.min(4, stops.length));
 		four(0, kind, n, opacity, 0);
-		if (kind == Radial)
-			four(16, m.x(x0, y0), m.y(x0, y0), radius * m.scale(), 0);
-		else
-			four(16, m.x(x0, y0), m.y(x0, y0), m.x(x1, y1), m.y(x1, y1));
+		// Pixels to path units is the inverse of `m`. Gradient space follows from that.
+		var det = m.a * m.d - m.b * m.c;
+		if (Math.abs(det) < 1e-12) {
+			four(0, 0, 1, 0, 0);
+			for (k in 1...8)
+				four(k * 16, 0, 0, 0, 0);
+			return;
+		}
+		var ia = m.d / det, ib = -m.b / det, ic = -m.c / det, id = m.a / det;
+		var ie = -(ia * m.e + ic * m.f), iff = -(ib * m.e + id * m.f);
+		four(16, ma * ia + mc * ib, mb * ia + md * ib, ma * ic + mc * id, mb * ic + md * id);
 		four(32, stops[0].offset, n > 1 ? stops[1].offset : 1, n > 2 ? stops[2].offset : 1, n > 3 ? stops[3].offset : 1);
 		for (i in 0...4) {
 			var s = stops[i < n ? i : n - 1];
 			rgba(48 + i * 16, s.rgb, s.alpha);
 		}
-		four(112, 0, 0, 0, 0);
+		four(112, ma * ie + mc * iff + me, mb * ie + md * iff + mf, spread, 0);
 	}
 }
-
