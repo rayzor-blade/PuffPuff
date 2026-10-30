@@ -1,6 +1,6 @@
 import haxe.io.Bytes;
 import lime.graphics.Image;
-import lime.graphics.Image.ImageBuffer;
+import lime.graphics.ImageBuffer;
 import lime.math.Matrix4;
 import lime.text.Font;
 import puffpuff.gpu.QuadBatcher;
