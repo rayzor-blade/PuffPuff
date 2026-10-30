@@ -594,7 +594,7 @@ class WgpuContext3D {
 		indexBuffer.storage.drawnFrame = frame;
 
 		var indexCount = numTriangles >= 0 ? numTriangles * 3 : indexBuffer.numIndices - firstIndex;
-		enc.renderDrawIndexed(indexCount, 1);
+		enc.renderDrawIndexedRange(indexCount, 1, firstIndex, 0, 0);
 
 		if (!wasPassActive) {
 			endRenderPass();

@@ -115,7 +115,18 @@ class MultiFlushScene {
 			]), 0, 2);
 			c3.drawTriangles(ib, proj);
 
+			// Second triangle of a two-quad index buffer only: the lower-left half.
+			var vb2 = c3.createVertexBuffer(4, 6);
+			vb2.uploadFromFloat32Array(quad(320, 20, 390, 90, 1, 1, 1));
+			var ib2 = c3.createIndexBuffer(12);
+			ib2.uploadFromArray([0, 1, 2, 0, 2, 3, 0, 1, 2, 0, 2, 3]);
+			c3.setVertexBufferAt(0, vb2, 0, VertexFormat.Float32x2);
+			c3.setVertexBufferAt(1, vb2, 2, VertexFormat.Float32x4);
+			c3.drawTriangles(ib2, proj, null, null, 3, 1);
+
 			c3.endRenderPass();
+			vb2.dispose();
+			ib2.dispose();
 			vb.dispose();
 			ib.dispose();
 			yellow.dispose();
@@ -131,6 +142,8 @@ class MultiFlushScene {
 		expect("second upload (orange)", 150, 150, 0xFF8000);
 		expect("partial upload keeps lower edge", 195, 186, 0xFF8000, 48);
 		expect("partial upload top edge (purple)", 330, 112, 0x9933FF, 48);
+		expect("firstIndex triangle (white)", 330, 80, 0xFFFFFF);
+		expect("firstIndex skips first triangle", 380, 30, 0x000000);
 		expect("background between quads", 100, 150, 0x000000);
 
 		if (failures.length > 0) {
