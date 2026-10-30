@@ -13,7 +13,7 @@ import window.CursorIcon;
 import window.MouseElementState;
 import window.MouseScrollDelta;
 import window.PhysicalKey;
-import window.WindowAttributes;
+import window.WindowAttributes as NativeWindowAttributes;
 
 class Window {
 	public var application:Application;
@@ -71,7 +71,7 @@ class Window {
 
 	@:noCompletion public var __nativeWindow:window.Window;
 	@:noCompletion public var __wgpuContext:WgpuContext;
-	@:noCompletion private var __attributes:WindowConfig;
+	@:noCompletion private var __attributes:WindowAttributes;
 	@:noCompletion private var __cursor:MouseCursor = DEFAULT;
 	@:noCompletion private var __frameRate:Float = 60.0;
 	@:noCompletion private var __mouseLock:Bool = false;
@@ -84,7 +84,15 @@ class Window {
 
 	private static var __nextId:Int = 0;
 
-	public function new(application:Application, attributes:WindowConfig = null) {
+	/** `context.vsyncMode` wins over the legacy `context.vsync`; on by default. **/
+	static function vsyncRequested(attributes:WindowAttributes):Bool {
+		var context = attributes.context;
+		if (context == null) return true;
+		if (context.vsyncMode != null) return context.vsyncMode != Off;
+		return context.vsync != null ? context.vsync : true;
+	}
+
+	public function new(application:Application, attributes:WindowAttributes = null) {
 		this.application = application;
 		this.id = __nextId++;
 		this.__attributes = attributes != null ? attributes : {};
@@ -94,9 +102,8 @@ class Window {
 		if (this.__attributes.height == null) this.__attributes.height = 600;
 		if (this.__attributes.title == null) this.__attributes.title = "PuffPuff Application";
 		if (this.__attributes.resizable == null) this.__attributes.resizable = true;
-		if (this.__attributes.vsync == null) this.__attributes.vsync = true;
 
-		var winAttr = new WindowAttributes();
+		var winAttr = new NativeWindowAttributes();
 		winAttr.title(this.__attributes.title);
 		winAttr.width(this.__attributes.width);
 		winAttr.height(this.__attributes.height);
@@ -114,7 +121,7 @@ class Window {
 			throw "PuffPuff: Failed to open native hlwindow Window";
 		}
 
-		__wgpuContext = new WgpuContext(__nativeWindow, this.__attributes.vsync);
+		__wgpuContext = new WgpuContext(__nativeWindow, vsyncRequested(this.__attributes));
 		context = new RenderContext(this, __wgpuContext, this.__attributes);
 	}
 
@@ -243,8 +250,9 @@ class Window {
 		var view = __wgpuContext.beginFrame();
 		if (view == null) return;
 
-		if (__attributes.background != null) {
-			__wgpuContext.clearColor(__attributes.background, 1.0);
+		var background = __attributes.context != null ? __attributes.context.background : null;
+		if (background != null) {
+			__wgpuContext.clearColor(background, 1.0);
 		} else {
 			__wgpuContext.clear(0.0, 0.0, 0.0, 1.0);
 		}

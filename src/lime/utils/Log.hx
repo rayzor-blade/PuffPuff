@@ -3,23 +3,6 @@ package lime.utils;
 
 import haxe.PosInfos;
 
-enum abstract LogLevel(Int) from Int to Int to UInt {
-	public var NONE = 0;
-	public var ERROR = 1;
-	public var WARN = 2;
-	public var INFO = 3;
-	public var DEBUG = 4;
-	public var VERBOSE = 5;
-
-	@:op(A > B) static function gt(a:LogLevel, b:LogLevel):Bool;
-
-	@:op(A >= B) static function gte(a:LogLevel, b:LogLevel):Bool;
-
-	@:op(A < B) static function lt(a:LogLevel, b:LogLevel):Bool;
-
-	@:op(A <= B) static function lte(a:LogLevel, b:LogLevel):Bool;
-}
-
 class Log {
 	public static var level:LogLevel = LogLevel.INFO;
 	public static var throwErrors:Bool = true;

@@ -1,6 +1,8 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.app;
 
+import lime.ui.WindowAttributes;
+
 typedef Config = {
 	@:optional var build:String;
 	@:optional var company:String;
@@ -10,30 +12,8 @@ typedef Config = {
 	@:optional var orientation:String;
 	@:optional var packageName:String;
 	@:optional var version:String;
-	@:optional var windows:Array<WindowConfig>;
+	@:optional var windows:Array<WindowAttributes>;
 }
 
-typedef WindowConfig = {
-	@:optional var allowHighDPI:Bool;
-	@:optional var alwaysOnTop:Bool;
-	@:optional var antialiasing:Int;
-	@:optional var background:Null<Int>;
-	@:optional var borderless:Bool;
-	@:optional var colorDepth:Int;
-	@:optional var depthBuffer:Bool;
-	@:optional var display:Int;
-	@:optional var fullscreen:Bool;
-	@:optional var hardware:Bool;
-	@:optional var height:Int;
-	@:optional var hidden:Bool;
-	@:optional var maximized:Bool;
-	@:optional var minimized:Bool;
-	@:optional var parameters:Dynamic;
-	@:optional var resizable:Bool;
-	@:optional var stencilBuffer:Bool;
-	@:optional var title:String;
-	@:optional var vsync:Bool;
-	@:optional var width:Int;
-	@:optional var x:Int;
-	@:optional var y:Int;
-}
+/** Pre-WindowAttributes name, kept so existing code compiles. **/
+typedef WindowConfig = WindowAttributes;

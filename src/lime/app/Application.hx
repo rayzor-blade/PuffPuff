@@ -10,6 +10,7 @@ import lime.ui.KeyModifier;
 import lime.ui.MouseButton;
 import lime.ui.MouseWheelMode;
 import lime.ui.Window;
+import lime.ui.WindowAttributes;
 
 class Application extends Module {
 	public static var current(default, null):Application;
@@ -41,7 +42,7 @@ class Application extends Module {
 	}
 
 	public function addModule(module:IModule):Void {
-		module._onRegister(this);
+		module.__registerLimeModule(this);
 		modules.push(module);
 	}
 
@@ -57,7 +58,7 @@ class Application extends Module {
 		}
 	}
 
-	public function createWindow(attributes:WindowConfig = null):Window {
+	public function createWindow(attributes:WindowAttributes = null):Window {
 		var win = new Window(this, attributes);
 		windows.push(win);
 		__windowById.set(win.id, win);
@@ -187,7 +188,7 @@ class Application extends Module {
 
 	public function removeModule(module:IModule):Void {
 		if (module != null) {
-			module._onUnregister(this);
+			module.__unregisterLimeModule(this);
 			modules.remove(module);
 		}
 	}

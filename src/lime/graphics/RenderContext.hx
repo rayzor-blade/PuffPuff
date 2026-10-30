@@ -1,12 +1,12 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.graphics;
 
-import lime.app.Config;
+import lime.ui.WindowAttributes;
 import lime.ui.Window;
 import puffpuff.gpu.WgpuContext;
 
 class RenderContext {
-	public var attributes:WindowConfig;
+	public var attributes:WindowAttributes;
 	public var cairo:Dynamic;
 	public var canvas2D:Dynamic;
 	public var dom:Dynamic;
@@ -21,7 +21,7 @@ class RenderContext {
 	public var wgpu:WgpuContext;
 	public var window:Window;
 
-	public function new(window:Window, wgpu:WgpuContext, attributes:WindowConfig = null) {
+	public function new(window:Window, wgpu:WgpuContext, attributes:WindowAttributes = null) {
 		this.window = window;
 		this.wgpu = wgpu;
 		this.attributes = attributes;

@@ -153,8 +153,7 @@ class Snapshot {
 				title: name,
 				width: width,
 				height: height,
-				background: clear,
-				vsync: true
+				context: {background: clear, vsync: true}
 			}]
 		});
 		app.onUpdate.add(deltaMs -> {
