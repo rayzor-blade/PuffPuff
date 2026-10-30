@@ -63,11 +63,7 @@ class Offscreen {
 		var b = (clear & 0xFF) / 255.0;
 		wgpuCtx.clear(r, g, b, clearAlpha);
 
-		var renderContext = new RenderContext(null, wgpuCtx, {
-			width: width,
-			height: height,
-			context: {background: clear}
-		});
+		var renderContext = new RenderContext(null, wgpuCtx, {background: clear});
 		draw(renderContext);
 		wgpuCtx.endOffscreen();
 	}

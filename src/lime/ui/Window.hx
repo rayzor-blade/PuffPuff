@@ -165,7 +165,7 @@ class Window {
 		}
 
 		__wgpuContext = new WgpuContext(__nativeWindow, vsyncRequested(this.__attributes));
-		context = new RenderContext(this, __wgpuContext, this.__attributes);
+		context = new RenderContext(this, __wgpuContext, this.__attributes.context);
 		__backend = new WindowBackend(this);
 		if (this.__attributes.alwaysOnTop == true) alwaysOnTop = true;
 		if (this.__attributes.appearance != null) appearance = this.__attributes.appearance;
