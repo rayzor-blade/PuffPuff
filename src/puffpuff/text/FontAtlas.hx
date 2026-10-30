@@ -38,6 +38,11 @@ class FontAtlas {
 	public var revision(default, null):Int = 0;
 	public var colorRevision(default, null):Int = 0;
 
+	/** Lays out plain ASCII lines from cached per-character data; off, every string goes to the shaper. **/
+	public var composeRuns = true;
+
+	final composer:RunComposer;
+
 	static var __defaultAtlas:Null<FontAtlas>;
 	static var __gammaLut:Null<Bytes>;
 
@@ -70,6 +75,7 @@ class FontAtlas {
 
 	public function new() {
 		Fonts.ensureBundled();
+		composer = new RunComposer(this);
 	}
 
 	public function upload(context3D:WgpuContext3D):WgpuTexture {
@@ -163,6 +169,18 @@ class FontAtlas {
 	 * atlas pixel rects, and line metrics.
 	 */
 	public function prepare(text:String, ?style:TextStyle):PreparedRun {
+		if (composeRuns && text != null && text.length > 0) {
+			var slot = composer.slotFor(16.0, style);
+			if (composer.compose(slot, text))
+				return composer.run(slot, text);
+		}
+		return prepareNative(text, style);
+	}
+
+	/**
+	 * Shapes `text` with the native engine, whatever it is: what `prepare` falls back to.
+	 */
+	public function prepareNative(text:String, ?style:TextStyle):PreparedRun {
 		Fonts.ensureBundled();
 		var s:TextStyle = style != null ? style : {};
 		var size:Float = s.size != null ? s.size : 16.0;
@@ -238,7 +256,22 @@ class FontAtlas {
 		#end
 	}
 
+	/**
+	 * The advance of every character of `text`, kerning folded in, or null when the text is not plain printable ASCII
+	 * that can be laid out from cached data (then use `prepare`).
+	 */
+	public function characterAdvances(text:String, size:Float = 16.0, ?style:TextStyle):Null<Array<Float>> {
+		if (!composeRuns || text == null || text.length == 0) return null;
+		var slot = composer.slotFor(size, style);
+		return composer.compose(slot, text) ? composer.advances(slot, text) : null;
+	}
+
 	public function measureText(text:String, size:Float = 16.0, ?style:TextStyle):{width:Float, ascent:Float, descent:Float, lineHeight:Float} {
+		if (composeRuns && text != null && text.length > 0) {
+			var slot = composer.slotFor(size, style);
+			if (composer.compose(slot, text))
+				return {width: composer.width(slot, text), ascent: slot.ascent, descent: slot.descent, lineHeight: slot.lineHeight};
+		}
 		var s:TextStyle = style != null ? {
 			size: style.size != null ? style.size : size,
 			family: style.family,
@@ -271,6 +304,17 @@ class FontAtlas {
 		?style:TextStyle
 	):Void {
 		if (batcher == null || text == null || text.length == 0) return;
+		if (composeRuns) {
+			var slot = composer.slotFor(size, style);
+			if (composer.compose(slot, text)) {
+				sync(batcher.context3D);
+				if (texture == null) return;
+				if (batcher.texture == null) batcher.begin(texture);
+				var pixel = style != null && style.pixel == true;
+				composer.draw(batcher, slot, text, x, y, color, pixel ? -Math.abs(alpha) : alpha, 1.0 / texture.width, 1.0 / texture.height);
+				return;
+			}
+		}
 		var s:TextStyle = style != null ? {
 			size: style.size != null ? style.size : size,
 			family: style.family,

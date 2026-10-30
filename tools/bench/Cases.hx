@@ -16,6 +16,7 @@ import puffpuff.canvas.Stroke;
 import puffpuff.gpu.QuadBatcher;
 import puffpuff.gpu.WgpuContext;
 import puffpuff.snapshot.Snapshot;
+import puffpuff.text.FontAtlas;
 
 /** Every benchmark case. Names are `area.subject[.variant]`, and the area is the filter prefix. **/
 @:access(puffpuff.canvas.Canvas2D)
@@ -24,7 +25,7 @@ class Cases {
 	static inline var H = 512;
 
 	public static function all():Array<BenchCase> {
-		return math().concat(simd()).concat(image()).concat(engine()).concat(gpu());
+		return math().concat(simd()).concat(image()).concat(text()).concat(engine()).concat(gpu());
 	}
 
 	static var seed = 20240601;
@@ -490,12 +491,99 @@ class Cases {
 		};
 	}
 
+	static inline var LABELS = 200;
+	static final PARAGRAPH = "The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly, and pack my box with five dozen liquor jugs. 0";
+
+	static var labelCounter = 0;
+
+	static function label(n:Int):String
+		return "Label " + n + ": the quick brown fox";
+
+	/** Text shaping and the screen of 200 labels that OpenFL's text benchmark draws; `ops` is paragraphs or labels. **/
+	static function text():Array<BenchCase> {
+		var atlas = FontAtlas.getDefault();
+		var style = {size: 14.0, family: "Arimo"};
+		function agrees(text:String):Null<String> {
+			atlas.composeRuns = false;
+			var native = atlas.prepare(text, style);
+			atlas.composeRuns = true;
+			var composed = atlas.prepare(text, style);
+			if (native.glyphs.length != composed.glyphs.length) return 'composed ${composed.glyphs.length} glyphs, native ${native.glyphs.length}';
+			if (Math.abs(native.width - composed.width) > 0.05) return 'composed width ${composed.width}, native ${native.width}';
+			for (i in 0...native.glyphs.length)
+				if (Math.abs(native.glyphs[i].x - composed.glyphs[i].x) > 1.0) return 'glyph $i is ${composed.glyphs[i].x}, native ${native.glyphs[i].x}';
+			return null;
+		}
+		return [
+			{
+				name: "text.shape.paragraph",
+				run: () -> atlas.prepare(PARAGRAPH + (labelCounter++), style),
+				check: () -> agrees(PARAGRAPH + "7")
+			},
+			{
+				name: "text.shape.paragraph.native",
+				run: () -> atlas.prepareNative(PARAGRAPH + (labelCounter++), style)
+			},
+			{
+				name: "text.shape.labels200",
+				ops: LABELS,
+				run: () -> for (i in 0...LABELS) atlas.prepare(label(labelCounter++), style),
+				check: () -> agrees(label(7))
+			},
+			{
+				name: "text.shape.labels200.native",
+				ops: LABELS,
+				run: () -> for (i in 0...LABELS) atlas.prepareNative(label(labelCounter++), style)
+			},
+			{
+				name: "text.measure.labels200",
+				ops: LABELS,
+				run: () -> for (i in 0...LABELS) atlas.measureText(label(labelCounter++), 14, style)
+			}
+		];
+	}
+
+	/** 200 labels drawn every frame: from runs shaped once (`cached`), or shaped again each frame as when the text changes. **/
+	static function labelsDraw(cached:Bool):Void->(puffpuff.gpu.WgpuContext3D->Void) {
+		return () -> {
+			var proj = new Matrix4();
+			proj.createOrtho(0, W, H, 0, -1, 1);
+			var batcher:QuadBatcher = null;
+			var atlas = FontAtlas.getDefault();
+			var style = {size: 14.0, family: "Arimo"};
+			var runs = [for (i in 0...LABELS) atlas.prepare(label(i), style)];
+			return c3 -> {
+				if (batcher == null) batcher = new QuadBatcher(c3, 4096);
+				var texture = atlas.upload(c3);
+				batcher.begin(texture);
+				for (i in 0...LABELS) {
+					var x = (i % 4) * 128 + 4.0;
+					var y = Std.int(i / 4) * 10 + 14.0;
+					if (cached) {
+						atlas.sync(c3);
+						var invW = 1.0 / texture.width, invH = 1.0 / texture.height;
+						for (g in runs[i].glyphs)
+							if (g.width > 0 && g.height > 0 && !g.isColor)
+								batcher.addQuad(g.width, 0, 0, g.height, Math.round(x + g.x), Math.round(y + g.y), g.u0 * invW, g.v0 * invH, (g.u1 - g.u0) * invW,
+									(g.v1 - g.v0) * invH, 1.0, 0xFFFFFF);
+					} else {
+						atlas.drawText(batcher, label(labelCounter++), x, y, 14.0, 0xFFFFFF, 1.0, style);
+					}
+				}
+				batcher.flush(proj);
+			};
+		};
+	}
+
 	static function gpu():Array<BenchCase> {
 		return [
 			gpuFrame("gpu.frame.vectors.submit", false, vectorDraw, vectorsDrawn),
 			gpuFrame("gpu.frame.vectors.readback", true, vectorDraw, vectorsDrawn),
 			gpuFrame("gpu.frame.sprites.submit", false, spriteDraw),
-			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw)
+			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
+			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(true)),
+			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(true)),
+			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(false))
 		];
 	}
 }

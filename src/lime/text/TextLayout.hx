@@ -30,11 +30,20 @@ class TextLayout {
 	private function position():Void {
 		__positions = [];
 		if (font == null || text == null || text.length == 0) return;
-		var run = font.getAtlas().prepare(text, {
+		var style = {
 			family: font.name == "Sans" ? null : font.name,
 			size: size * 1.0,
 			pixel: font.pixelMode
-		});
+		};
+		// Plain ASCII has one advance per character, kerning folded in; anything else is shaped and positioned by glyph.
+		var advances = font.getAtlas().characterAdvances(text, size * 1.0, style);
+		if (advances != null) {
+			for (i in 0...advances.length) {
+				__positions.push(new GlyphPosition(new Glyph(text.charCodeAt(i)), new Vector2(advances[i], 0), new Vector2(0, 0)));
+			}
+			return;
+		}
+		var run = font.getAtlas().prepare(text, style);
 		for (i in 0...run.glyphs.length) {
 			var g = run.glyphs[i];
 			var nextX = (i + 1 < run.glyphs.length) ? run.glyphs[i + 1].x : run.width;
