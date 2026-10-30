@@ -583,7 +583,8 @@ class Cases {
 			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
 			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(true)),
 			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(true)),
-			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(false))
+			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(false)),
+			gpuFrame("gpu.frame.text.dynamic.readback", true, labelsDraw(false))
 		];
 	}
 }
