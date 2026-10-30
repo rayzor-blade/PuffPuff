@@ -29,6 +29,8 @@ class Font {
 	public var pixelMode:Bool = false;
 
 	@:noCompletion public var __fontPath:Null<String>;
+	@:noCompletion private var __fontID:String;
+	@:noCompletion private var __fontPathWithoutDirectory:String;
 	@:noCompletion public var __fontBytes:Null<Bytes>;
 	@:noCompletion public var __atlas:Null<FontAtlas>;
 
@@ -157,12 +159,52 @@ class Font {
 		return new Future<Font>(() -> fromBytes(bytes), true);
 	}
 
+	/** Resolves a font by family name from the registered and bundled fonts (system fonts are not searched). **/
+	public static function loadFromName(name:String):Future<Font> {
+		return new Future<Font>(() -> new Font(name), true);
+	}
+
 	public static function loadFromFile(path:String):Future<Font> {
 		return new Future<Font>(() -> fromFile(path), true);
 	}
 
+	@:noCompletion private function __copyFrom(other:Font):Void {
+		if (other == null) return;
+		ascender = other.ascender;
+		descender = other.descender;
+		height = other.height;
+		name = other.name;
+		numGlyphs = other.numGlyphs;
+		src = other.src;
+		underlinePosition = other.underlinePosition;
+		underlineThickness = other.underlineThickness;
+		unitsPerEM = other.unitsPerEM;
+		pixelMode = other.pixelMode;
+		__fontID = other.__fontID;
+		__fontPath = other.__fontPath;
+		__fontPathWithoutDirectory = other.__fontPathWithoutDirectory;
+		__fontBytes = other.__fontBytes;
+		__atlas = other.__atlas;
+	}
+
+	@:noCompletion private function __fromFile(path:String):Void {
+		__fontPath = path;
+		__fontPathWithoutDirectory = haxe.io.Path.withoutDirectory(path);
+		var resolved = resolvePath(path);
+		if (resolved != null) {
+			var bytes = sys.io.File.getBytes(resolved);
+			Fonts.register(bytes);
+			__fromBytes(bytes);
+		}
+	}
+
+	@:noCompletion private function __initializeSource():Void {
+		if (__fontBytes != null) __fromBytes(__fontBytes) else refreshMetrics();
+	}
+
 	@:noCompletion public function __fromBytes(bytes:Bytes):Void {
 		__fontBytes = bytes;
+		src = bytes;
 		if (bytes == null || bytes.length < 12) return;
 
 		var sfnt = readU32BE(bytes, 0);
