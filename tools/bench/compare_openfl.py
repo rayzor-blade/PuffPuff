@@ -24,13 +24,13 @@ def ms(name):
 
 rows = [
     ("New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff)",
-     of["layout.paragraph.us"]["median"] / 1000, [("PuffPuff", ms("text.shape.paragraph")), ("whole lines, for reference", ms("text.shape.paragraph.whole"))]),
+     of["layout.paragraph.us"]["median"] / 1000, [("", ms("text.shape.paragraph")), ("whole lines, for reference", ms("text.shape.paragraph.whole"))]),
     ("200 labels, static, per frame, PuffPuff submitted", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.submit"))]),
     ("200 labels, static, per frame, PuffPuff finished and read back", of["frame.static.ms"]["median"], [("", ms("gpu.frame.text.static.readback"))]),
     ("200 labels, text set every frame, PuffPuff submitted", of["frame.dynamic.ms"]["median"],
-     [("PuffPuff", ms("gpu.frame.text.dynamic.submit")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.submit"))]),
+     [("", ms("gpu.frame.text.dynamic.submit")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.submit"))]),
     ("200 labels, text set every frame, PuffPuff finished and read back", of["frame.dynamic.ms"]["median"],
-     [("PuffPuff", ms("gpu.frame.text.dynamic.readback")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.readback"))]),
+     [("", ms("gpu.frame.text.dynamic.readback")), ("whole lines, for reference", ms("gpu.frame.text.dynamic.whole.readback"))]),
 ]
 print(f"OpenFL {of_meta['openfl']} on Lime {of_meta['lime']}, hxcpp {of_meta['hxcpp']} release, {of_meta['runs']} runs ({of_meta['date']}); "
       f"PuffPuff {pp_meta['commit']} on {pp_meta['ash']} ({pp_meta['mode']} tier); {pp_meta['cpu']}.\n")
