@@ -7,6 +7,9 @@ class Contour {
 	public final points:Array<Float> = [];
 	public var closed = false;
 
+	/** Whether a drawing command or a close made it, not just a `moveTo`. Only then can a single point be a dot. **/
+	public var drawn = false;
+
 	public function new() {}
 
 	public inline function count():Int
@@ -51,7 +54,7 @@ class Flatten {
 		// The pen and the subpath's start, before the transform: arcs are worked out there.
 		var px = 0.0, py = 0.0, sx = 0.0, sy = 0.0;
 		inline function finish() {
-			if (current != null && current.count() > 0)
+			if (current != null && (current.count() > 1 || (current.count() == 1 && current.drawn)))
 				out.push(current);
 			current = null;
 		}
@@ -60,6 +63,7 @@ class Flatten {
 				current = new Contour();
 				current.add(m.x(px, py), m.y(px, py));
 			}
+			current.drawn = true;
 			return current;
 		}
 		for (c in path.commands)
@@ -89,6 +93,7 @@ class Flatten {
 					py = y;
 				case Close:
 					if (current != null) {
+						current.drawn = true;
 						current.closed = true;
 						// Its last point back at its first is the closing step itself.
 						var n = current.count();
