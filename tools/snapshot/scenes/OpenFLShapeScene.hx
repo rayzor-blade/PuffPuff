@@ -3,6 +3,7 @@ import openfl.display.Shape;
 import puffpuff.snapshot.Offscreen;
 import puffpuff.gpu.WgpuContext3D;
 import puffpuff.snapshot.Png;
+import puffpuff.snapshot.Snapshot;
 
 /**
  * An OpenFL `Stage` on a hidden window drawing vector graphics through `openfl.display.WgpuRenderer`
@@ -81,8 +82,10 @@ class OpenFLShapeScene {
 		// The line style begins at the pen, which drawCircle left at the circle's edge: a lone moveTo draws no dot.
 		if (!near(at(203, 100), BACKGROUND)) failures.push('stray dot ${StringTools.hex(at(203, 100), 6)}');
 
-		sys.FileSystem.createDirectory(".puffpuff/snapshots");
-		sys.io.File.saveBytes(".puffpuff/snapshots/openfl-shape.png", Png.encode(pw, ph, pixels));
+		sys.FileSystem.createDirectory(Snapshot.dir());
+		var path = sys.FileSystem.absolutePath(haxe.io.Path.join([Snapshot.dir(), "openfl-shape-scene.png"]));
+		sys.io.File.saveBytes(path, Png.encode(pw, ph, pixels));
+		Snapshot.event('snapshot openfl-shape-scene $path ${pw}x$ph');
 		if (failures.length > 0) throw 'OpenFL shape render wrong: ${failures.join(", ")}';
 		Sys.println("OpenFL shape render ok");
 		Sys.exit(0);
