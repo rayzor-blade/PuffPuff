@@ -1,8 +1,12 @@
+import lime.math.Matrix3;
 import lime.math.Matrix4;
 import lime.math.Vector4;
 import lime.utils.Float32Array;
 
-/** Asserts that the ash-simd paths of Matrix4 and Vector4 agree with plain scalar arithmetic. **/
+/**
+	Asserts that Matrix4's ash-simd multiply agrees with scalar arithmetic, and that Matrix3 and Vector4
+	(object-field types, kept scalar) keep full double precision.
+**/
 class SimdCheck {
 	static function scalarMul(a:Array<Float>, b:Array<Float>):Array<Float> {
 		var r = [for (i in 0...16) 0.0];
@@ -43,6 +47,15 @@ class SimdCheck {
 		var s = new Vector4(1, 2, 3, 1).add(new Vector4(4, 5, 6, 1));
 		if (s.x != 5 || s.y != 7 || s.z != 9 || s.w != 2) {
 			Sys.println('FAIL Vector4.add gave ${s.x},${s.y},${s.z},${s.w}');
+			Sys.exit(1);
+		}
+
+		// Large translation: float32 lanes would lose about 3e-4 here; doubles stay exact to rounding.
+		var m3 = new Matrix3(1, 0, 0, 1, 12345.678, 9876.543);
+		m3.concat(new Matrix3(1.0001, 0, 0, 0.9999, 0.37, 0.19));
+		var wantTx = 12345.678 * 1.0001 + 0.37, wantTy = 9876.543 * 0.9999 + 0.19;
+		if (Math.abs(m3.tx - wantTx) > 1e-9 || Math.abs(m3.ty - wantTy) > 1e-9) {
+			Sys.println('FAIL Matrix3.concat lost precision: tx ${m3.tx} want $wantTx, ty ${m3.ty} want $wantTy');
 			Sys.exit(1);
 		}
 		Sys.println("simd-check: all checks passed");

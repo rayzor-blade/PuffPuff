@@ -1,10 +1,9 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.math;
 
-import ash.simd.Float32x4;
 
 /**
- * 2D 3x2 affine transformation matrix accelerated with `ash-simd`.
+ * 2D 3x2 affine transformation matrix.
  */
 class Matrix3 {
 	public var a:Float;
@@ -28,20 +27,14 @@ class Matrix3 {
 	}
 
 	public function concat(m:Matrix3):Void {
-		// SIMD 2x2 multiplication + translation transform
-		var col0 = Float32x4.make(m.a, m.b, m.a, m.b);
-		var col1 = Float32x4.make(m.c, m.d, m.c, m.d);
-		var abcd = col0 * Float32x4.make(a, a, c, c) + col1 * Float32x4.make(b, b, d, d);
-		var tVec = Float32x4.make(m.a, m.b, 0.0, 0.0) * Float32x4.splat(tx)
-			+ Float32x4.make(m.c, m.d, 0.0, 0.0) * Float32x4.splat(ty)
-			+ Float32x4.make(m.tx, m.ty, 0.0, 0.0);
-
-		a = abcd.x;
-		b = abcd.y;
-		c = abcd.z;
-		d = abcd.w;
-		tx = tVec.x;
-		ty = tVec.y;
+		// Plain double arithmetic: faster than four-lane vectors for six object fields, and exact.
+		var oa = a, ob = b, oc = c, od = d, otx = tx, oty = ty;
+		a = oa * m.a + ob * m.c;
+		b = oa * m.b + ob * m.d;
+		c = oc * m.a + od * m.c;
+		d = oc * m.b + od * m.d;
+		tx = otx * m.a + oty * m.c + m.tx;
+		ty = otx * m.b + oty * m.d + m.ty;
 	}
 
 	public inline function copyFrom(sourceMatrix3:Matrix3):Void {

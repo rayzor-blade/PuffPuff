@@ -42,34 +42,35 @@ abstract Matrix4(Float32Array) from Float32Array to Float32Array {
 	}
 
 	/**
-	 * Multiplies `this = this * rhs` using SIMD 4-lane vector operations.
+	 * Multiplies `this = this * rhs` with four-lane vectors. Memory is addressed through typed `hl.Bytes`
+	 * (never `Dynamic`) and each weight is read straight from memory, so Ash keeps the whole chain in
+	 * registers; the result is written back only after every source lane has been read.
 	 */
 	public function append(rhs:Matrix4):Void {
 		var rhsArr:Float32Array = rhs;
-		var bA = @:privateAccess (this.buffer : Dynamic).b;
-		var bB = @:privateAccess (rhsArr.buffer : Dynamic).b;
-		var oA = this.byteOffset;
-		var oB = rhsArr.byteOffset;
+		var pa:hl.Bytes = this.buffer;
+		var pb:hl.Bytes = rhsArr.buffer;
+		var oa = this.byteOffset;
+		var ob = rhsArr.byteOffset;
 
-		var col0 = Float32x4.load(bB, oB);
-		var col1 = Float32x4.load(bB, oB + 16);
-		var col2 = Float32x4.load(bB, oB + 32);
-		var col3 = Float32x4.load(bB, oB + 48);
+		var c0 = Float32x4.load(pb, ob);
+		var c1 = Float32x4.load(pb, ob + 16);
+		var c2 = Float32x4.load(pb, ob + 32);
+		var c3 = Float32x4.load(pb, ob + 48);
 
-		var a0 = Float32x4.load(bA, oA);
-		var a1 = Float32x4.load(bA, oA + 16);
-		var a2 = Float32x4.load(bA, oA + 32);
-		var a3 = Float32x4.load(bA, oA + 48);
+		var r0 = c0 * Float32x4.splat(pa.getF32(oa)) + c1 * Float32x4.splat(pa.getF32(oa + 4)) + c2 * Float32x4.splat(pa.getF32(oa + 8))
+			+ c3 * Float32x4.splat(pa.getF32(oa + 12));
+		var r1 = c0 * Float32x4.splat(pa.getF32(oa + 16)) + c1 * Float32x4.splat(pa.getF32(oa + 20)) + c2 * Float32x4.splat(pa.getF32(oa + 24))
+			+ c3 * Float32x4.splat(pa.getF32(oa + 28));
+		var r2 = c0 * Float32x4.splat(pa.getF32(oa + 32)) + c1 * Float32x4.splat(pa.getF32(oa + 36)) + c2 * Float32x4.splat(pa.getF32(oa + 40))
+			+ c3 * Float32x4.splat(pa.getF32(oa + 44));
+		var r3 = c0 * Float32x4.splat(pa.getF32(oa + 48)) + c1 * Float32x4.splat(pa.getF32(oa + 52)) + c2 * Float32x4.splat(pa.getF32(oa + 56))
+			+ c3 * Float32x4.splat(pa.getF32(oa + 60));
 
-		var r0 = col0 * Float32x4.splat(a0.x) + col1 * Float32x4.splat(a0.y) + col2 * Float32x4.splat(a0.z) + col3 * Float32x4.splat(a0.w);
-		var r1 = col0 * Float32x4.splat(a1.x) + col1 * Float32x4.splat(a1.y) + col2 * Float32x4.splat(a1.z) + col3 * Float32x4.splat(a1.w);
-		var r2 = col0 * Float32x4.splat(a2.x) + col1 * Float32x4.splat(a2.y) + col2 * Float32x4.splat(a2.z) + col3 * Float32x4.splat(a2.w);
-		var r3 = col0 * Float32x4.splat(a3.x) + col1 * Float32x4.splat(a3.y) + col2 * Float32x4.splat(a3.z) + col3 * Float32x4.splat(a3.w);
-
-		r0.store(bA, oA);
-		r1.store(bA, oA + 16);
-		r2.store(bA, oA + 32);
-		r3.store(bA, oA + 48);
+		r0.store(pa, oa);
+		r1.store(pa, oa + 16);
+		r2.store(pa, oa + 32);
+		r3.store(pa, oa + 48);
 	}
 
 	public function createOrtho(x0:Float, x1:Float, y0:Float, y1:Float, zNear:Float, zFar:Float):Void {

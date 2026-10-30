@@ -1,8 +1,6 @@
 // Lime API compatibility layer — adapted from OpenFL Lime (https://github.com/openfl/lime, MIT License)
 package lime.math;
 
-import ash.simd.Float32x4;
-
 class Vector4 {
 	public var x:Float;
 	public var y:Float;
@@ -18,26 +16,18 @@ class Vector4 {
 
 	public inline function add(a:Vector4, result:Vector4 = null):Vector4 {
 		if (result == null) result = new Vector4();
-		var va = Float32x4.make(x, y, z, w);
-		var vb = Float32x4.make(a.x, a.y, a.z, a.w);
-		var vr = va + vb;
-		result.setTo(vr.x, vr.y, vr.z, vr.w);
+		result.setTo(x + a.x, y + a.y, z + a.z, w + a.w);
 		return result;
 	}
 
 	public inline function subtract(a:Vector4, result:Vector4 = null):Vector4 {
 		if (result == null) result = new Vector4();
-		var va = Float32x4.make(x, y, z, w);
-		var vb = Float32x4.make(a.x, a.y, a.z, a.w);
-		var vr = va - vb;
-		result.setTo(vr.x, vr.y, vr.z, vr.w);
+		result.setTo(x - a.x, y - a.y, z - a.z, w - a.w);
 		return result;
 	}
 
 	public inline function dotProduct(a:Vector4):Float {
-		var va = Float32x4.make(x, y, z, 0.0);
-		var vb = Float32x4.make(a.x, a.y, a.z, 0.0);
-		return (va * vb).sum();
+		return x * a.x + y * a.y + z * a.z;
 	}
 
 	public inline function clone():Vector4 {
@@ -65,7 +55,6 @@ class Vector4 {
 
 	public var lengthSquared(get, never):Float;
 	private inline function get_lengthSquared():Float {
-		var v = Float32x4.make(x, y, z, 0.0);
-		return (v * v).sum();
+		return x * x + y * y + z * z;
 	}
 }

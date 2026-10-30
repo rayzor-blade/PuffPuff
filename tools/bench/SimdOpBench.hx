@@ -56,9 +56,10 @@ class SimdOpBench {
 		Sys.println('simd/scalar time ratio: ${Math.round(simd / scalar * 100) / 100}');
 
 		var v1 = new Vector4(1, 2, 3, 1), v2 = new Vector4(4, 5, 6, 1);
-		var vs = time("Vector4.add (ash-simd)   ", 5000000, () -> v1.add(v2));
+		var out = new Vector4();
+		var vs = time("Vector4.add (no alloc)     ", 5000000, () -> v1.add(v2, out));
 		var x = 0.0;
-		var sc = time("scalar vec add (4 floats)", 5000000, () -> {
+		var sc = time("hand-written scalar add   ", 5000000, () -> {
 			x = v1.x + v2.x;
 			x += v1.y + v2.y;
 			x += v1.z + v2.z;
