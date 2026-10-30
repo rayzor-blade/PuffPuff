@@ -132,7 +132,10 @@ private class AbstractHTTPRequest<T> implements _IHTTPRequest {
 	public function cancel():Void;
 }
 
-/** Loads a file path directly and anything else with `haxe.Http`. **/
+/**
+	Loads a file path directly. Other URIs go through `haxe.Http` only with `-D puffpuff_http`, which makes
+	every program that reaches this class need HashLink's `ssl` library at load time; without it they fail.
+**/
 private class HTTPRequestBackend {
 	var parent:_IHTTPRequest;
 	var cancelled = false;
@@ -164,6 +167,7 @@ private class HTTPRequestBackend {
 			}
 			return promise.future;
 		}
+		#if puffpuff_http
 		try {
 			var http = new haxe.Http(uri);
 			for (h in parent.headers) http.setHeader(h.name, h.value);
@@ -176,6 +180,9 @@ private class HTTPRequestBackend {
 		} catch (e:Dynamic) {
 			promise.error(new _HTTPRequestErrorResponse<Dynamic>(e, null));
 		}
+		#else
+		promise.error(new _HTTPRequestErrorResponse<Dynamic>('Cannot load $uri: network requests need -D puffpuff_http', null));
+		#end
 		return promise.future;
 	}
 
