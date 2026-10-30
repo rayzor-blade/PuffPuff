@@ -105,6 +105,7 @@ class WgpuContext {
 	}
 
 	public function endOffscreen():Void {
+		if (context3D != null) context3D.endRenderPass();
 		if (currentEncoder != null && currentEncoder.valid()) {
 			currentEncoder.submit(queue);
 			currentEncoder.destroy();
@@ -162,6 +163,7 @@ class WgpuContext {
 	}
 
 	public function endFrame():Void {
+		if (context3D != null) context3D.endRenderPass();
 		if (currentEncoder != null && currentEncoder.valid()) {
 			currentEncoder.submit(queue);
 			currentEncoder.destroy();

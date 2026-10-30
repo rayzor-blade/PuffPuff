@@ -127,6 +127,14 @@ class Window {
 
 	private static var __nextId:Int = 0;
 
+	/** When set, the next windows open no native window and render into this offscreen context (headless snapshots). **/
+	@:noCompletion public static var __headless:Null<WgpuContext>;
+
+	/** The display scale reported by headless windows. **/
+	@:noCompletion public static var __headlessScale:Float = 1.0;
+
+	@:noCompletion private var __scale:Float = 1.0;
+
 	/** `context.vsyncMode` wins over the legacy `context.vsync`; on by default. **/
 	static function vsyncRequested(attributes:WindowAttributes):Bool {
 		var context = attributes.context;
@@ -146,25 +154,30 @@ class Window {
 		if (this.__attributes.title == null) this.__attributes.title = "PuffPuff Application";
 		if (this.__attributes.resizable == null) this.__attributes.resizable = true;
 
-		var winAttr = new NativeWindowAttributes();
-		winAttr.title(this.__attributes.title);
-		winAttr.width(this.__attributes.width);
-		winAttr.height(this.__attributes.height);
-		winAttr.resizable(this.__attributes.resizable);
+		if (__headless != null) {
+			__wgpuContext = __headless;
+			__scale = __headlessScale;
+		} else {
+			var winAttr = new NativeWindowAttributes();
+			winAttr.title(this.__attributes.title);
+			winAttr.width(this.__attributes.width);
+			winAttr.height(this.__attributes.height);
+			winAttr.resizable(this.__attributes.resizable);
 
-		if (this.__attributes.x != null) winAttr.x(this.__attributes.x);
-		if (this.__attributes.y != null) winAttr.y(this.__attributes.y);
-		if (this.__attributes.borderless != null) winAttr.decorations(!this.__attributes.borderless);
-		if (this.__attributes.fullscreen != null) winAttr.fullscreen(this.__attributes.fullscreen);
-		if (this.__attributes.maximized != null) winAttr.maximized(this.__attributes.maximized);
-		if (this.__attributes.hidden != null) winAttr.visible(!this.__attributes.hidden);
+			if (this.__attributes.x != null) winAttr.x(this.__attributes.x);
+			if (this.__attributes.y != null) winAttr.y(this.__attributes.y);
+			if (this.__attributes.borderless != null) winAttr.decorations(!this.__attributes.borderless);
+			if (this.__attributes.fullscreen != null) winAttr.fullscreen(this.__attributes.fullscreen);
+			if (this.__attributes.maximized != null) winAttr.maximized(this.__attributes.maximized);
+			if (this.__attributes.hidden != null) winAttr.visible(!this.__attributes.hidden);
 
-		__nativeWindow = window.Window.open(winAttr);
-		if (!__nativeWindow.valid()) {
-			throw "PuffPuff: Failed to open native hlwindow Window";
+			__nativeWindow = window.Window.open(winAttr);
+			if (!__nativeWindow.valid()) {
+				throw "PuffPuff: Failed to open native hlwindow Window";
+			}
+
+			__wgpuContext = new WgpuContext(__nativeWindow, vsyncRequested(this.__attributes));
 		}
-
-		__wgpuContext = new WgpuContext(__nativeWindow, vsyncRequested(this.__attributes));
 		context = new RenderContext(this, __wgpuContext, this.__attributes.context);
 		__backend = new WindowBackend(this);
 		if (this.__attributes.alwaysOnTop == true) alwaysOnTop = true;
@@ -307,6 +320,17 @@ class Window {
 		var view = __wgpuContext.beginFrame();
 		if (view == null) return;
 
+		__renderContents();
+		__wgpuContext.endFrame();
+	}
+
+	/** One frame into the headless target; the caller owns the target's encoder (`WgpuContext.endOffscreen`). **/
+	@:noCompletion public function __renderHeadlessFrame():Void {
+		if (__closed) return;
+		__renderContents();
+	}
+
+	private function __renderContents():Void {
 		var background = __attributes.context != null ? __attributes.context.background : null;
 		if (background != null) {
 			__wgpuContext.clearColor(background, 1.0);
@@ -317,7 +341,6 @@ class Window {
 		__inFrame = true;
 		onRender.dispatch(context);
 		__inFrame = false;
-		__wgpuContext.endFrame();
 	}
 
 	public function setMinSize(width:Int, height:Int):Void {
@@ -539,7 +562,7 @@ class Window {
 		return v;
 	}
 
-	private function get_scale():Float return __nativeWindow.valid() ? __nativeWindow.scaleFactor() : 1.0;
+	private function get_scale():Float return __nativeWindow.valid() ? __nativeWindow.scaleFactor() : __scale;
 
 	private function get_textInputEnabled():Bool return __textInputEnabled;
 	private function set_textInputEnabled(v:Bool):Bool {
