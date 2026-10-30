@@ -60,6 +60,17 @@ class TextCacheCheck {
 		for (t in others) agree(atlas, t, style, 0.5, 1.0);
 		Sys.println("composed lines agree with whole lines (" + (latin.length + others.length) + " strings)");
 
+		// One advance per UTF-16 unit, adding up to the line's width: what TextLayout gives TextEngine.
+		for (t in latin.slice(0, 5).concat(others.slice(0, 3)).concat(["emoji " + String.fromCharCode(0x1F389) + " done", "   leading spaces"])) {
+			var advances = atlas.characterAdvances(t, 14.0, style);
+			if (advances.length != t.length) fail('"${t.substr(0, 20)}": ${advances.length} advances for ${t.length} characters');
+			var sum = 0.0;
+			for (a in advances) sum += a;
+			var width = atlas.measureText(t, 14.0, style).width;
+			if (t.indexOf("\n") < 0 && Math.abs(sum - width) > 0.05) fail('"${t.substr(0, 20)}": advances add up to $sum, width $width');
+		}
+		Sys.println("character advances add up to the widths");
+
 		// A real clear of the glyph atlas: composed lines must keep agreeing with what is in the atlas afterwards.
 		var generation = atlas.generation;
 		var every = "";

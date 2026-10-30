@@ -30,18 +30,13 @@ class TextLayout {
 	private function position():Void {
 		__positions = [];
 		if (font == null || text == null || text.length == 0) return;
-		var style = {
+		// One position per character: the engine knows each character's advance, spaces and ligatures included.
+		var advances = font.getAtlas().characterAdvances(text, size * 1.0, {
 			family: font.name == "Sans" ? null : font.name,
-			size: size * 1.0,
 			pixel: font.pixelMode
-		};
-		var run = font.getAtlas().prepare(text, style);
-		for (i in 0...run.glyphs.length) {
-			var g = run.glyphs[i];
-			var nextX = (i + 1 < run.glyphs.length) ? run.glyphs[i + 1].x : run.width;
-			var advX = nextX - g.x;
-			var code = i < text.length ? text.charCodeAt(i) : 0;
-			__positions.push(new GlyphPosition(new Glyph(code), new Vector2(advX, 0), new Vector2(0, -g.y)));
+		});
+		for (i in 0...advances.length) {
+			__positions.push(new GlyphPosition(new Glyph(text.charCodeAt(i)), new Vector2(advances[i], 0), new Vector2(0, 0)));
 		}
 	}
 

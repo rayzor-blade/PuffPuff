@@ -45,6 +45,12 @@ extern class TextNative {
 	 * Whether lines are composed from cached words (1, the default) or shaped whole (0). Returns the previous setting.
 	 */
 	static function blinc_text_word_cache(enabled:Int):Int;
+
+	/**
+	 * Writes the advance of every character (Unicode scalar) of `text`, kerning included, as f32s to `out`, and the line's
+	 * width as one f32 to `info`. Returns the character count.
+	 */
+	static function blinc_text_advances(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes):Int;
 }
 
 class TextUtf8 {

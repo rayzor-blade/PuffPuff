@@ -198,6 +198,19 @@ class FontAtlas {
 	 * (`glyphs * 9`).
 	 */
 	function shape(text:String, size:Float, style:Null<TextStyle>):Int {
+		shapeStyleFor(size, style);
+		var textBytes = TextUtf8.encode(text);
+		var n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+		if (n > shapeCapacity) {
+			shapeCapacity = n + (n >> 1);
+			shapeOut = new hl.Bytes(shapeCapacity * 4);
+			n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+		}
+		return n;
+	}
+
+	/** Packs `style` into `shapeStyle` and its family into `familyBytes`. **/
+	function shapeStyleFor(size:Float, style:Null<TextStyle>):Void {
 		Fonts.ensureBundled();
 		var family:Null<String> = null;
 		var weight = 400;
@@ -224,15 +237,6 @@ class FontAtlas {
 		shapeStyle.setF32(12, size);
 		shapeStyle.setF32(16, spacing);
 		shapeStyle.setF32(20, leading);
-
-		var textBytes = TextUtf8.encode(text);
-		var n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
-		if (n > shapeCapacity) {
-			shapeCapacity = n + (n >> 1);
-			shapeOut = new hl.Bytes(shapeCapacity * 4);
-			n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
-		}
-		return n;
 	}
 	#end
 
@@ -287,6 +291,34 @@ class FontAtlas {
 			lineHeight: size * 1.2
 		};
 		#end
+	}
+
+	/**
+	 * Advance of each UTF-16 unit of `text`: the distance from its origin to the next unit's, kerning included, so they add
+	 * up to the line's width. A surrogate pair puts its advance on the first unit and 0 on the second. A line break has 0.
+	 */
+	public function characterAdvances(text:String, size:Float = 16.0, ?style:TextStyle):Array<Float> {
+		var out:Array<Float> = [];
+		if (text == null || text.length == 0) return out;
+		#if hl
+		shapeStyleFor(size, style);
+		var textBytes = TextUtf8.encode(text);
+		var capacity = text.length + 1;
+		var advances = new hl.Bytes(capacity * 4);
+		var n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo);
+		if (n > capacity) {
+			capacity = n;
+			advances = new hl.Bytes(capacity * 4);
+			n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo);
+		}
+		var k = 0;
+		for (i in 0...text.length) {
+			var code = text.charCodeAt(i);
+			var lowHalf = code >= 0xDC00 && code <= 0xDFFF && i > 0 && text.charCodeAt(i - 1) >= 0xD800 && text.charCodeAt(i - 1) <= 0xDBFF;
+			out.push(lowHalf || k >= n ? 0.0 : advances.getF32((k++) * 4));
+		}
+		#end
+		return out;
 	}
 
 	public function measureText(text:String, size:Float = 16.0, ?style:TextStyle):{width:Float, ascent:Float, descent:Float, lineHeight:Float} {
