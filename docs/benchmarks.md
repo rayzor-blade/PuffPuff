@@ -4,22 +4,35 @@ What PuffPuff measures, how to reproduce it, and how it compares with OpenFL's n
 is produced by scripts in `tools/bench`; the numbers below are from one machine and one run of those scripts, so
 rerun them before quoting a number elsewhere.
 
+**Build the native text library in release mode.** PuffPuff's text shaping and glyph atlas live in `blinc_abi`
+(Rust). A debug build of it is 40 to 80 times slower at shaping a new line (about 570 us against 7 to 15 us for a 28
+character label), and every number below is from the release build. The build stages
+`../blinc_abi/target/release/libblinc_abi.dylib` and warns when only a debug one exists; build it with
+`cargo build --release` in `../blinc_abi`.
+
 ## Text against OpenFL
 
 The only area with an OpenFL baseline so far. The OpenFL side is a small OpenFL application
 (`tools/bench/openfl/src/Main.hx`) built with hxcpp in release mode and run natively; the PuffPuff side is the
 `text.*` and `gpu.frame.text.*` cases of `tools/bench`.
 
+OpenFL 9.5.2 on Lime 8.3.2, hxcpp 4.3.2 release, 5 runs (2026-10-30); PuffPuff 21980a1 on ash 0.1.14 (llvm tier); Apple M1 Pro.
+
 | Measurement | OpenFL (ms) | PuffPuff (ms) | PuffPuff is |
 |---|---:|---:|---:|
-| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping (PuffPuff, one line) | 0.628 | 0.008 | 79.7x faster |
-| 200 labels, static, per frame: PuffPuff submitted | 1.450 | 0.250 | 5.8x faster |
-| 200 labels, static, per frame: PuffPuff finished and read back | 1.450 | 1.152 | 1.3x faster |
-| 200 labels, text set every frame: PuffPuff submitted | 9.113 | 0.399 | 22.8x faster |
-| 200 labels, text set every frame: PuffPuff finished and read back | 9.113 | 1.327 | 6.9x faster |
+| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) (composed) | 0.628 | 0.008 | 82.2x faster |
+| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) (native engine) | 0.628 | 0.043 | 14.7x faster |
+| 200 labels, static, per frame, PuffPuff submitted | 1.450 | 0.224 | 6.5x faster |
+| 200 labels, static, per frame, PuffPuff finished and read back | 1.450 | 1.063 | 1.4x faster |
+| 200 labels, text set every frame, PuffPuff submitted (composed) | 9.113 | 0.360 | 25.3x faster |
+| 200 labels, text set every frame, PuffPuff submitted (native engine) | 9.113 | 3.458 | 2.6x faster |
+| 200 labels, text set every frame, PuffPuff finished and read back (composed) | 9.113 | 1.230 | 7.4x faster |
+| 200 labels, text set every frame, PuffPuff finished and read back (native engine) | 9.113 | 4.946 | 1.8x faster |
 
-OpenFL 9.5.2 on Lime 8.3.2, hxcpp 4.3.2 release, median of 5 runs. PuffPuff on Ash 0.1.14, LLVM tier, median of
-15 samples. Apple M1 Pro, 2026-10-30.
+"Composed" is PuffPuff's default text path: printable ASCII laid out from per-character data cached after first
+use (`puffpuff.text.RunComposer`). "Native engine" is the same text shaped as a whole line by `blinc_abi` with that
+cache switched off, which is what any text takes that the composer does not cover (non-ASCII, ligatures). The
+engine alone is already faster than OpenFL; the cache makes new text cheaper still.
 
 ### How to read it
 
@@ -30,25 +43,29 @@ OpenFL 9.5.2 on Lime 8.3.2, hxcpp 4.3.2 release, median of 5 runs. PuffPuff on A
   texture. The GPU's work is not waited for, so this is the CPU-side cost of the frame. It is not directly
   comparable with a frame that includes presenting; treat it as how much CPU the text path needs.
 - **PuffPuff "finished and read back"** waits for the GPU and copies the 512 x 512 frame to the CPU. That copy
-  costs about 0.9 ms (the difference to the submitted row) and OpenFL's frame has no equivalent, so this row is a
-  conservative upper bound on PuffPuff's frame time. The true comparison lies between the two rows.
+  costs about 0.8 ms (the difference to the submitted row for static text) and OpenFL's frame has no equivalent,
+  so this row is a conservative upper bound on PuffPuff's frame time. The true comparison lies between the two rows.
 - **Paragraph row.** OpenFL's time is `TextField` layout of a wrapped paragraph (the text engine, no drawing).
   PuffPuff's time is shaping one new line: it does not wrap yet, so the two do slightly different work. Both
   rows are for text the engine has not seen before; text it has seen is cheaper on both sides.
-- **Runtimes differ.** OpenFL is native code compiled by hxcpp; PuffPuff runs on Ash's JIT. The text cost is
-  mostly in cached lookups and a few native calls, so the tier matters little, but it is a difference.
-- **Scope.** PuffPuff composes printable ASCII from cached per-character data (`puffpuff.text.RunComposer`).
-  Other text, such as CJK, emoji and ligatures, is shaped by the native engine at 0.5 to 1.5 ms per new string
-  and is not covered by these numbers. First use of a character or character pair costs one native call.
+- **Runtimes differ.** OpenFL is native code compiled by hxcpp; PuffPuff runs on Ash's JIT. The shaping itself is
+  native code on both sides; the surrounding Haxe is compiled by hxcpp on one and JIT-compiled on the other.
+- **Scope of composition.** Printable ASCII only. Other text, such as CJK, emoji and ligatures, goes to the native
+  engine (the "native engine" rows). First use of a character or character pair costs one native call.
+- **Glyph placement.** Composed glyphs use the first subpixel phase of each bitmap and are placed on whole pixels,
+  so against the engine's own layout their x differs by 0.36 px on average and 0.83 px at most; widths are
+  identical. At 14 px the two are indistinguishable in `TextCompositionScene`; about 3% of the pixels of the larger
+  `TypographyScene` differ by more than 30 of 255.
 - **Not a `TextField` comparison yet.** PuffPuff's OpenFL backend does not draw `TextField` yet, so this compares
   the two text paths directly, not the same program on both backends.
 
 ### Reproducing
 
 ```sh
-tools/bench/openfl/run.sh                # builds and runs OpenFL's side; opens a window for a few seconds
-tools/bench/run.sh --mode llvm --baseline # PuffPuff's cases; stores tools/bench/baselines/<machine>-llvm.json
-python3 tools/bench/compare_openfl.py     # prints the table above
+(cd ../blinc_abi && cargo build --release)  # once; the benchmark stages this library
+tools/bench/openfl/run.sh                   # builds and runs OpenFL's side; opens a window for a few seconds
+tools/bench/run.sh --mode llvm --baseline   # PuffPuff's cases; stores tools/bench/baselines/<machine>-llvm.json
+python3 tools/bench/compare_openfl.py       # prints the table above
 ```
 
 `openfl/run.sh` installs Lime, OpenFL and hxcpp into a haxelib repository under `.puffpuff/bench/openfl`, not the
@@ -63,36 +80,35 @@ growth across a third batch of runs. A case can carry a correctness check and a 
 checksum or a failed check fails the run. `tools/bench/run.sh` compares a run with the stored baseline for the
 same machine and mode and fails on a slowdown beyond the tolerance (30% by default).
 
-Baseline: Ash 0.1.14, LLVM tier, Apple M1 Pro, 2026-10-30. `ns/op` is per logical operation (a pixel, a label, a
-matrix); frame cases are per frame.
+Baseline: PuffPuff `21980a1`, Ash 0.1.14, LLVM tier, Apple M1 Pro, 2026-10-30. Time is per logical operation (a
+pixel, a label, a matrix); frame cases are per frame.
 
 | Case | Median | Allocation per op |
 |---|---:|---:|
-| `math.matrix4.append` (SIMD) | 8.0 ns | 0 B |
-| `math.matrix4.append.scalar` | 40.7 ns | 0 B |
+| `math.matrix4.append` (SIMD) | 7.7 ns | 0 B |
+| `math.matrix4.append.scalar` | 41.3 ns | 0 B |
 | `math.matrix3.concat` | 6.0 ns | 0 B |
 | `math.vector4.add` | 4.5 ns | 0 B |
-| `simd.batch.add.inplace` / `.scalar` | 0.2 ns / 0.6 ns | 0 B |
-| `image.fillRect` (per pixel) | 1.6 ns | 0 B |
+| `simd.batch.add.inplace` / `.scalar` | 0.2 ns / 0.6 ns | 0 B / 0 B |
+| `image.fillRect` (per pixel) | 1.7 ns | 0 B |
 | `image.copyPixels` (per pixel) | 0.1 ns | 0 B |
-| `image.copyPixels.merge` (per pixel) | 102.5 ns | 128 B |
-| `image.getPixels` (per pixel) | 45.2 ns | 68 B |
-| `text.shape.paragraph`, 133 characters, new each call | 7.9 us | 24 KB |
-| `text.shape.paragraph.native`, same, native engine | 1.53 ms | 30 KB |
-| `text.shape.labels200` (per 28-character label) | 2.1 us | 6 KB |
-| `text.shape.labels200.native` (per label) | 596.7 us | 7.7 KB |
-| `text.measure.labels200` (per label) | 614 ns | 352 B |
-| `canvas2d.build.cold` | 7.7 us | 16 KB |
-| `canvas2d.build.reused` | 387 ns | 72 B |
+| `image.copyPixels.merge` (per pixel) | 100.7 ns | 128 B |
+| `image.getPixels` (per pixel) | 45.0 ns | 68 B |
+| `text.shape.paragraph` / `.native`, 133 characters | 7.6 us / 42.7 us | 24 KB / 30 KB |
+| `text.shape.labels200` / `.native` (per 28-character label) | 2.1 us / 14.7 us | 6 KB / 8 KB |
+| `text.measure.labels200` (per label) | 591.9 ns | 352 B |
+| `canvas2d.build.cold` / `.reused` | 7.5 us / 387.6 ns | 17 KB / 72 B |
 | `quadbatcher.addQuad` | 5.1 ns | 0 B |
 | `mesh.appendTranslated` (per vertex) | 1.8 ns | 0 B |
-| `gpu.frame.vectors.submit` / `.readback` | 0.52 ms / 1.42 ms | 40 KB / 2.1 MB |
-| `gpu.frame.sprites.submit` / `.readback` | 0.16 ms / 1.01 ms | 3 KB / 2.1 MB |
-| `gpu.frame.text.static.submit` / `.readback` | 0.25 ms / 1.15 ms | 3 KB / 2.1 MB |
-| `gpu.frame.text.dynamic.submit` / `.readback` | 0.40 ms / 1.33 ms | 58 KB / 2.2 MB |
+| `gpu.frame.vectors.submit` / `.readback` | 492.4 us / 1.38 ms | 40 KB / 2.1 MB |
+| `gpu.frame.sprites.submit` / `.readback` | 169.8 us / 1.08 ms | 3 KB / 2.1 MB |
+| `gpu.frame.text.static.submit` / `.readback` | 224.1 us / 1.06 ms | 3 KB / 2.1 MB |
+| `gpu.frame.text.dynamic.submit` / `.readback` | 359.7 us / 1.23 ms | 58 KB / 2.2 MB |
+| `gpu.frame.text.dynamic.native.submit` / `.readback` | 3.46 ms / 4.95 ms | 1.6 MB / 3.7 MB |
 
 Allocation in the text cases includes the benchmark building its own label strings. The `.readback` frame cases
-allocate the 512 x 512 readback buffer, which is most of their figure.
+allocate the 512 x 512 readback buffer, which is most of their figure. The native-engine dynamic frame allocates
+1.6 MB per frame, against 58 KB for the composed one.
 
 ### Known weak spots
 
@@ -101,7 +117,8 @@ Stated here because they are measured, not because they are fixed:
 - Image pixel operations are plain Haxe loops (`image.copyPixels.merge`, `image.getPixels`). Only plain copies
   run at memory speed.
 - Composed text covers printable ASCII only, and has no wrapping.
-- `canvas2d.build.cold` allocates 16 KB per build; the per-frame allocation work is not done.
+- `canvas2d.build.cold` allocates 17 KB per build; the per-frame allocation work is not done.
+- The native text path allocates a result object for every glyph of every new line.
 
 ### What is not compared yet
 
@@ -113,4 +130,5 @@ measured on that backend first.
 
 The harness checks outputs, and the snapshot scenes in `tools/snapshot/scenes` render headless to PNG with pixel
 checks: `OpenFLShapeScene`, `OpenFLGradientScene` and `OpenFLBitmapScene` run a real OpenFL `Stage` on PuffPuff at
-display scales 1 and 2, and `TextCompositionScene` compares composed text with the native engine's, line by line.
+display scales 1 and 2, `TextCompositionScene` compares composed text with the native engine's line by line, and
+`TextAtlasClearCheck` forces the glyph atlas to be cleared and checks that composed text follows it.
