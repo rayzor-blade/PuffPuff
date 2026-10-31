@@ -381,6 +381,8 @@ class WgpuContext3D {
 	private var depthTexture:Null<WgpuTexture>;
 	private var retiredTextures:Array<WgpuTexture> = [];
 	private var textureSlots:Array<Null<WgpuTexture>> = [];
+	private var slotRepeat:Array<Null<Bool>> = [];
+	private var slotSmooth:Array<Null<Bool>> = [];
 	private var currentShader:GpuShader;
 	private var activeTexture:Null<WgpuTexture>;
 	private var vertexBuffers:Map<Int, {buffer:WgpuVertexBuffer3D, offset:Int, format:VertexFormat}>;
@@ -457,6 +459,12 @@ class WgpuContext3D {
 
 	public function setCulling(mode:CullMode):Void {
 		cullMode = mode;
+	}
+
+	/** Sampling for the texture in `slot` with `drawProgram`, over `smoothing` and `repeat`. **/
+	public function setSamplerAt(slot:Int, repeat:Bool, smooth:Bool):Void {
+		slotRepeat[slot] = repeat;
+		slotSmooth[slot] = smooth;
 	}
 
 	public function setTextureAt(samplerSlot:Int, texture:Null<WgpuTexture>):Void {
@@ -770,11 +778,12 @@ class WgpuContext3D {
 			bindings.buffer(ubo);
 			tempBuffers.push(ubo);
 		}
-		var sampler = repeat ? linearRepeatSampler : (smoothing ? linearClampSampler : nearestClampSampler);
 		for (i in 0...layout.textures.length) {
 			var texture = textureSlots[i];
+			var wrap = slotRepeat[i] != null ? slotRepeat[i] : repeat;
+			var smooth = slotSmooth[i] != null ? slotSmooth[i] : smoothing;
 			bindings.texture((texture != null ? texture : whiteTexture()).view);
-			bindings.sampler(sampler);
+			bindings.sampler(wrap ? linearRepeatSampler : (smooth ? linearClampSampler : nearestClampSampler));
 		}
 
 		var bindGroup = dev.bindGroup(pipeline, 0, bindings);

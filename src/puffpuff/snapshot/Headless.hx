@@ -48,6 +48,9 @@ class Headless {
 
 		for (i in 0...frames) {
 			if (i > 0) target.beginOffscreen(view, pw, ph);
+			// Timers (`haxe.Timer.delay`, as Stage3D uses) run between frames, as they do in a live window.
+			Sys.sleep(0.002);
+			sys.thread.Thread.current().events.progress();
 			app.onUpdate.dispatch(16);
 			for (window in app.__windows) window.__renderHeadlessFrame();
 			target.endOffscreen();
