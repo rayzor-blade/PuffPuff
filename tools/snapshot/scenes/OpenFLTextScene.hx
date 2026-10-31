@@ -4,11 +4,12 @@ import openfl.text.TextFieldAutoSize;
 import openfl.text.TextFormat;
 import openfl.text.TextFormatAlign;
 import puffpuff.snapshot.Headless;
+import puffpuff.text.FontAtlas;
 
 /**
  * OpenFL `TextField`s on a headless window through `openfl.display.WgpuRenderer`, at display scales 1 and 2:
  * plain, wrapped, bold, italic, serif and monospace text, a background and border, colored ranges, alignment and
- * mixed scripts. The checks compare the ink drawn with the layout OpenFL computed. Needs OpenFL with `-D openfl_wgpu`:
+ * mixed scripts, and once more with the opt-in hinted advances. The checks compare the ink drawn with the layout OpenFL computed. Needs OpenFL with `-D openfl_wgpu`:
  *
  *   PUFFPUFF_HAXE_FLAGS="-cp ../openfl/src -D openfl=9.5.2 -D openfl_wgpu" tools/snapshot/run.sh tools/snapshot/scenes/OpenFLTextScene.hx
  */
@@ -93,6 +94,10 @@ class OpenFLTextScene {
 	static function main():Void {
 		check("openfl-text-scene-1x", 1.0);
 		check("openfl-text-scene", 2.0);
+		// Opt-in hinted layout, which is how OpenFL native lays text out by default: whole-pixel advances.
+		FontAtlas.hintedAdvances = true;
+		check("openfl-text-scene-hinted-1x", 1.0);
+		FontAtlas.hintedAdvances = false;
 		Sys.println("OpenFL text render ok");
 	}
 

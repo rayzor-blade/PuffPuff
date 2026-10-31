@@ -10,7 +10,10 @@ typedef TextStyle = {
 	?italic:Bool,
 	?letterSpacing:Float,
 	?lineHeight:Float,
-	?pixel:Bool
+	?pixel:Bool,
+
+	/** Rounds each character's advance to a whole pixel, except kerning, like a hinted layout. **/
+	?hinted:Bool
 }
 
 typedef TextOutline = {

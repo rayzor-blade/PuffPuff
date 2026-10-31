@@ -32,9 +32,9 @@ extern class TextNative {
 	 * Shapes `text` and rasterizes glyphs into the shared coverage and color atlases.
 	 * Writes 9 `f32`s per glyph to `out`: `[x, y, width, height, u0, v0, u1, v1, isColor]`
 	 * and `[widest, ascent, descent, lineHeight]` as 4 `f32`s to `info`.
-	 * Returns total `f32`s (`glyphCount * 9`).
+	 * Returns total `f32`s (`glyphCount * 9`). `flags` is 0, or 1 to round each character's advance to a whole pixel.
 	 */
-	static function blinc_text_prepare(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes):Int;
+	static function blinc_text_prepare(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes, flags:Int):Int;
 
 	/**
 	 * How many times the glyph atlases were cleared to make room. A glyph rectangle taken before a clear is stale after it.
@@ -50,7 +50,7 @@ extern class TextNative {
 	 * Writes the advance of every character (Unicode scalar) of `text`, kerning included, as f32s to `out`, and the line's
 	 * width as one f32 to `info`. Returns the character count.
 	 */
-	static function blinc_text_advances(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes):Int;
+	static function blinc_text_advances(text:hl.Bytes, font:hl.Bytes, style:hl.Bytes, out:hl.Bytes, capacity:Int, info:hl.Bytes, flags:Int):Int;
 }
 
 class TextUtf8 {

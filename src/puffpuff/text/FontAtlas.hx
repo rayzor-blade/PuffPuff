@@ -41,6 +41,13 @@ class FontAtlas {
 	/** How many times the native atlases were cleared. Glyph rectangles from before a clear are stale. **/
 	public var generation(get, never):Int;
 
+	/**
+	 * Whether text that asks for hinted layout gets whole-pixel advances. Off by default, so advances are exact. OpenFL's
+	 * `TextEngine` asks for it (`autoHint`) unless `antiAliasType` is `ADVANCED` with sharpness 400 or more, and OpenFL on
+	 * native rounds each glyph's advance then. Turning this on makes PuffPuff's widths and line breaks match.
+	 */
+	public static var hintedAdvances = false;
+
 	static var __defaultAtlas:Null<FontAtlas>;
 	static var __gammaLut:Null<Bytes>;
 
@@ -52,6 +59,7 @@ class FontAtlas {
 	var shapeCapacity = 256 * 9;
 	final shapeInfo:hl.Bytes = new hl.Bytes(16);
 	final shapeStyle:hl.Bytes = new hl.Bytes(24);
+	var shapeFlags = 0;
 	var familyName:Null<String>;
 	var familyBytes:Null<hl.Bytes>;
 	#end
@@ -200,11 +208,11 @@ class FontAtlas {
 	function shape(text:String, size:Float, style:Null<TextStyle>):Int {
 		shapeStyleFor(size, style);
 		var textBytes = TextUtf8.encode(text);
-		var n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+		var n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo, shapeFlags);
 		if (n > shapeCapacity) {
 			shapeCapacity = n + (n >> 1);
 			shapeOut = new hl.Bytes(shapeCapacity * 4);
-			n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo);
+			n = TextNative.blinc_text_prepare(textBytes, familyBytes, shapeStyle, shapeOut, shapeCapacity, shapeInfo, shapeFlags);
 		}
 		return n;
 	}
@@ -237,6 +245,7 @@ class FontAtlas {
 		shapeStyle.setF32(12, size);
 		shapeStyle.setF32(16, spacing);
 		shapeStyle.setF32(20, leading);
+		shapeFlags = style != null && style.hinted == true ? 1 : 0;
 	}
 	#end
 
@@ -305,11 +314,11 @@ class FontAtlas {
 		var textBytes = TextUtf8.encode(text);
 		var capacity = text.length + 1;
 		var advances = new hl.Bytes(capacity * 4);
-		var n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo);
+		var n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo, shapeFlags);
 		if (n > capacity) {
 			capacity = n;
 			advances = new hl.Bytes(capacity * 4);
-			n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo);
+			n = TextNative.blinc_text_advances(textBytes, familyBytes, shapeStyle, advances, capacity, shapeInfo, shapeFlags);
 		}
 		var k = 0;
 		for (i in 0...text.length) {

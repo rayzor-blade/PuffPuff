@@ -114,7 +114,8 @@ class Font {
 			italic: style.italic,
 			letterSpacing: style.letterSpacing,
 			lineHeight: style.lineHeight,
-			pixel: style.pixel != null ? style.pixel : pixelMode
+			pixel: style.pixel != null ? style.pixel : pixelMode,
+			hinted: style.hinted
 		} : {
 			size: size,
 			family: name != null && name != "Sans" ? name : null,
