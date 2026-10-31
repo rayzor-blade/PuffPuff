@@ -318,6 +318,14 @@ class WgpuContext3D {
 	// Tracked Context3D state
 	public var blendEnabled:Bool = true;
 
+	/** While enabled, draws are clipped to the scissor rectangle (target pixels from the top left). **/
+	public var scissorEnabled(default, null) = false;
+
+	var scissorX = 0;
+	var scissorY = 0;
+	var scissorWidth = 0;
+	var scissorHeight = 0;
+
 	/** Whether the next `drawQuadsInstanced` texture is premultiplied. Set the blend factors to match. **/
 	public var quadsPremultiplied:Bool = false;
 	public var srcRgb:BlendFactor = BlendFactor.SrcAlpha;
@@ -483,6 +491,39 @@ class WgpuContext3D {
 		}
 		enc.renderSetViewport(0, 0, targetWidth(), targetHeight(), 0.0, 1.0);
 		passActive = true;
+		applyScissor();
+	}
+
+	/**
+	 * Clips later draws, in this and later passes, to a rectangle of the target (pixels from the top left). The rectangle is
+	 * cut to the target, and an empty one clips everything.
+	 */
+	public function setScissorRectangle(x:Int, y:Int, width:Int, height:Int):Void {
+		var left = Std.int(Math.max(0, x));
+		var top = Std.int(Math.max(0, y));
+		var right = Std.int(Math.min(targetWidth(), x + width));
+		var bottom = Std.int(Math.min(targetHeight(), y + height));
+		scissorEnabled = true;
+		scissorX = left;
+		scissorY = top;
+		scissorWidth = Std.int(Math.max(0, right - left));
+		scissorHeight = Std.int(Math.max(0, bottom - top));
+		applyScissor();
+	}
+
+	/** Stops clipping draws. **/
+	public function disableScissor():Void {
+		scissorEnabled = false;
+		applyScissor();
+	}
+
+	function applyScissor():Void {
+		if (!passActive || wgpu.currentEncoder == null) return;
+		if (scissorEnabled) {
+			wgpu.currentEncoder.renderSetScissorRect(scissorX, scissorY, scissorWidth, scissorHeight);
+		} else {
+			wgpu.currentEncoder.renderSetScissorRect(0, 0, targetWidth(), targetHeight());
+		}
 	}
 
 	public function endRenderPass():Void {
