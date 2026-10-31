@@ -22,6 +22,7 @@ import gpu.GpuColor;
 import gpu.GpuRenderPassDepthStencilAttachment;
 import gpu.GpuRenderPassDescriptor;
 import gpu.LoadOp;
+import gpu.MipmapFilterMode;
 import gpu.StoreOp;
 import gpu.GpuSampler;
 import gpu.GpuSamplerDescriptor;
@@ -222,22 +223,53 @@ class WgpuTexture {
 	public var height(default, null):Int;
 	public var format(default, null):TextureFormat;
 	public var gpuTexture(default, null):GpuTexture;
+	/** Samples every mip level. **/
 	public var view(default, null):GpuTextureView;
+	public var mipLevels(default, null):Int;
 
-	public function new(context:WgpuContext3D, width:Int, height:Int, format:TextureFormat = Rgba8unorm) {
+	/** Only the top level, which is what a render pass draws into. **/
+	public var baseView(get, never):GpuTextureView;
+
+	var base:Null<GpuTextureView>;
+
+	public function new(context:WgpuContext3D, width:Int, height:Int, format:TextureFormat = Rgba8unorm, mipLevels:Int = 1) {
 		this.context = context;
 		this.width = Std.int(Math.max(1, width));
 		this.height = Std.int(Math.max(1, height));
 		this.format = format;
+		this.mipLevels = Std.int(Math.max(1, mipLevels));
+		allocate();
+	}
 
-		var extent = new GpuExtent3D(this.width);
-		extent.height(this.height);
-		this.gpuTexture = context.wgpu.device.texture(new GpuTextureDescriptor(
-			extent,
-			format,
-			usageOf(format)
-		));
+	function allocate():Void {
+		var extent = new GpuExtent3D(width);
+		extent.height(height);
+		var descriptor = new GpuTextureDescriptor(extent, format, usageOf(format));
+		if (mipLevels > 1) descriptor.mipLevelCount(mipLevels);
+		this.gpuTexture = context.wgpu.device.texture(descriptor);
 		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
+		this.base = null;
+	}
+
+	/** The number of levels in a full chain down to 1x1. **/
+	public static function fullChain(width:Int, height:Int):Int {
+		var n = 1;
+		var size = Std.int(Math.max(width, height));
+		while (size > 1) {
+			size >>= 1;
+			n++;
+		}
+		return n;
+	}
+
+	function get_baseView():GpuTextureView {
+		if (mipLevels == 1) return view;
+		if (base == null) {
+			var descriptor = new GpuTextureViewDescriptor();
+			descriptor.mipLevelCount(1);
+			base = gpuTexture.createView(descriptor);
+		}
+		return base;
 	}
 
 	/** Color textures are sampled, drawn into, uploaded to and read back. A depth texture is only drawn into. **/
@@ -274,18 +306,33 @@ class WgpuTexture {
 		newWidth = Std.int(Math.max(1, newWidth));
 		newHeight = Std.int(Math.max(1, newHeight));
 		if (newWidth == width && newHeight == height) return;
-		if (view.valid()) view.destroy();
-		if (gpuTexture.valid()) gpuTexture.destroy();
+		release();
 		this.width = newWidth;
 		this.height = newHeight;
-		var extent = new GpuExtent3D(this.width);
-		extent.height(this.height);
-		this.gpuTexture = context.wgpu.device.texture(new GpuTextureDescriptor(
-			extent,
-			format,
-			usageOf(format)
-		));
-		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
+		this.mipLevels = 1;
+		allocate();
+	}
+
+	/** Writes the tightly packed texels of mip `level`, which is `width >> level` by `height >> level` (at least 1x1). **/
+	public function uploadLevel(level:Int, bytes:Bytes):Void {
+		if (bytes == null || level < 0 || level >= mipLevels) return;
+		var w = Std.int(Math.max(1, width >> level));
+		var h = Std.int(Math.max(1, height >> level));
+		var destination = new GpuTexelCopyTextureInfo(gpuTexture);
+		destination.mipLevel(level);
+		var layout = new GpuTexelCopyBufferLayout();
+		layout.bytesPerRow(w * 4);
+		layout.rowsPerImage(h);
+		var extent = new GpuExtent3D(w);
+		extent.height(h);
+		context.wgpu.queue.writeTextureWith(destination, bytes, layout, extent);
+	}
+
+	function release():Void {
+		if (base != null && base.valid()) base.destroy();
+		base = null;
+		if (view.valid()) view.destroy();
+		if (gpuTexture.valid()) gpuTexture.destroy();
 	}
 
 	public function uploadFromUInt8Array(data:UInt8Array):Void {
@@ -299,8 +346,7 @@ class WgpuTexture {
 	}
 
 	public function dispose():Void {
-		if (view.valid()) view.destroy();
-		if (gpuTexture.valid()) gpuTexture.destroy();
+		release();
 	}
 }
 
@@ -383,6 +429,8 @@ class WgpuContext3D {
 	private var textureSlots:Array<Null<WgpuTexture>> = [];
 	private var slotRepeat:Array<Null<Bool>> = [];
 	private var slotSmooth:Array<Null<Bool>> = [];
+	private var slotMip:Array<Null<Int>> = [];
+	private var mipSamplers:Map<Int, GpuSampler> = [];
 	private var currentShader:GpuShader;
 	private var activeTexture:Null<WgpuTexture>;
 	private var vertexBuffers:Map<Int, {buffer:WgpuVertexBuffer3D, offset:Int, format:VertexFormat}>;
@@ -440,8 +488,8 @@ class WgpuContext3D {
 		return new WgpuIndexBuffer3D(this, numIndices);
 	}
 
-	public function createTexture(width:Int, height:Int, format:TextureFormat = Rgba8unorm):WgpuTexture {
-		return new WgpuTexture(this, width, height, format);
+	public function createTexture(width:Int, height:Int, format:TextureFormat = Rgba8unorm, mipLevels:Int = 1):WgpuTexture {
+		return new WgpuTexture(this, width, height, format, mipLevels);
 	}
 
 	public function setBlendFactors(sourceFactor:BlendFactor, destinationFactor:BlendFactor):Void {
@@ -461,10 +509,30 @@ class WgpuContext3D {
 		cullMode = mode;
 	}
 
-	/** Sampling for the texture in `slot` with `drawProgram`, over `smoothing` and `repeat`. **/
-	public function setSamplerAt(slot:Int, repeat:Bool, smooth:Bool):Void {
+	/** Sampling for the texture in `slot` with `drawProgram`, over `smoothing` and `repeat`. `mip` is 0 for level 0 only, 1 for the nearest level, 2 to blend two. **/
+	public function setSamplerAt(slot:Int, repeat:Bool, smooth:Bool, mip:Int = 0):Void {
 		slotRepeat[slot] = repeat;
 		slotSmooth[slot] = smooth;
+		slotMip[slot] = mip;
+	}
+
+	function mipSampler(repeat:Bool, smooth:Bool, mip:Int):GpuSampler {
+		var key = (repeat ? 1 : 0) | (smooth ? 2 : 0) | (mip << 2);
+		var sampler = mipSamplers.get(key);
+		if (sampler == null) {
+			var d = new GpuSamplerDescriptor();
+			var filter = smooth ? FilterMode.Linear : FilterMode.Nearest;
+			d.magFilter(filter);
+			d.minFilter(filter);
+			var address = repeat ? AddressMode.Repeat : AddressMode.ClampToEdge;
+			d.addressModeU(address);
+			d.addressModeV(address);
+			d.mipmapFilter(mip == 2 ? MipmapFilterMode.Linear : MipmapFilterMode.Nearest);
+			if (mip == 0) d.lodMaxClamp(0);
+			sampler = wgpu.device.sampler(d);
+			mipSamplers.set(key, sampler);
+		}
+		return sampler;
 	}
 
 	public function setTextureAt(samplerSlot:Int, texture:Null<WgpuTexture>):Void {
@@ -526,7 +594,7 @@ class WgpuContext3D {
 	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0, clearDepth:Null<Float> = null):Void {
 		if (passActive) return;
 		var enc = wgpu.currentEncoder;
-		var view = renderTarget != null ? renderTarget.view : wgpu.currentView;
+		var view = renderTarget != null ? renderTarget.baseView : wgpu.currentView;
 		if (enc == null || view == null) return;
 
 		if (clearR != null && !depthEnabled) {
@@ -783,7 +851,7 @@ class WgpuContext3D {
 			var wrap = slotRepeat[i] != null ? slotRepeat[i] : repeat;
 			var smooth = slotSmooth[i] != null ? slotSmooth[i] : smoothing;
 			bindings.texture((texture != null ? texture : whiteTexture()).view);
-			bindings.sampler(wrap ? linearRepeatSampler : (smooth ? linearClampSampler : nearestClampSampler));
+			bindings.sampler(mipSampler(wrap, smooth, slotMip[i] != null ? slotMip[i] : 0));
 		}
 
 		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
@@ -1132,5 +1200,7 @@ class WgpuContext3D {
 		if (linearClampSampler.valid()) linearClampSampler.destroy();
 		if (nearestClampSampler.valid()) nearestClampSampler.destroy();
 		if (linearRepeatSampler.valid()) linearRepeatSampler.destroy();
+		for (sampler in mipSamplers) if (sampler.valid()) sampler.destroy();
+		mipSamplers.clear();
 	}
 }

@@ -32,7 +32,8 @@ class SampleHost {
 			var app = new Application();
 			// Animations follow the wall clock, so each frame takes a moment.
 			app.onUpdate.add(_ -> Sys.sleep(0.03));
-			var window:openfl.display.Window = cast app.createWindow({width: width, height: height});
+			// A project's window is white unless project.xml says otherwise.
+			var window:openfl.display.Window = cast app.createWindow({width: width, height: height, context: {background: 0xFFFFFF}});
 			// As OpenFL's application template does: the sample's constructor already sees its stage.
 			DisplayObject.__initStage = window.stage;
 			var root = SampleMacro.create();

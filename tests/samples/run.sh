@@ -11,6 +11,7 @@
 #   PUFFPUFF_HAXE_FLAGS=...            extra Haxe compiler flags
 #
 # Samples that use actuate or box2d need those haxelibs installed. Sources are cloned by fetch.sh at pinned commits.
+# A sample written for GLSL or AGAL runs from a port: ports/<path>/<source> holds the files rewritten for HXSL.
 set -e
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
@@ -63,7 +64,11 @@ PY
 		assetflag="$assetflag -D sample_assets=${abs#;}"
 	fi
 
-	if ! log=$(cd "$repo" && haxe build.hxml -cp "$openfl/src" -cp "$dir/$source" -cp "$here/host" $libflags \
+	# A port (HXSL in place of GLSL or AGAL) has its changed sources in ports/<path>/<source>, which win over the sample's own.
+	portflag=""
+	[ -d "$here/ports/$path/$source" ] && portflag="-cp $here/ports/$path/$source"
+
+	if ! log=$(cd "$repo" && haxe build.hxml -cp "$openfl/src" -cp "$dir/$source" $portflag -cp "$here/host" $libflags \
 		-D openfl=9.5.2 -D openfl_wgpu -D "sample_main=$main" -D "sample_name=$name" -D "sample_size=$size" $assetflag ${PUFFPUFF_HAXE_FLAGS:-} \
 		-main SampleHost -hl "$out/$name.hl" 2>&1); then
 		echo "$path: does not build: $(echo "$log" | grep -v Warning | head -1)"
