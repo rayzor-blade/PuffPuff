@@ -59,6 +59,12 @@ class Affine {
 	public function scale():Float
 		return Math.sqrt(Math.abs(a * d - b * c));
 
+	/** True when it scales both axes alike (rotation and flips allowed), so a line keeps one width under it. **/
+	public function isConformal():Bool {
+		var u = a * a + b * b, v = c * c + d * d;
+		return Math.abs(u - v) <= 1e-6 * (u + v) && Math.abs(a * c + b * d) <= 1e-6 * (u + v);
+	}
+
 	public function isIdentity():Bool
 		return a == 1 && b == 0 && c == 0 && d == 1 && e == 0 && f == 0;
 

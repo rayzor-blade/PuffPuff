@@ -103,6 +103,21 @@ class Mesh {
 		length = end;
 	}
 
+	/** Maps vertices `[from, to)` through `m`. Their edge distances no longer hold, so they are dropped (`FAR`). **/
+	public function transformRange(from:Int, to:Int, m:Affine):Void {
+		var b = bytes;
+		for (v in from...to) {
+			var o = v * BYTES;
+			var x = b.getFloat(o), y = b.getFloat(o + 4);
+			b.setFloat(o, m.x(x, y));
+			b.setFloat(o + 4, m.y(x, y));
+			b.setFloat(o + 16, FAR);
+			b.setFloat(o + 20, FAR);
+			b.setFloat(o + 24, FAR);
+			b.setFloat(o + 28, FAR);
+		}
+	}
+
 	public inline function getX(v:Int):Float
 		return bytes.getFloat(v * BYTES);
 

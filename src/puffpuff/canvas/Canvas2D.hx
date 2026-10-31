@@ -145,11 +145,19 @@ class Canvas2D {
 			return;
 		}
 		var from = mesh.vertexCount();
-		var flat:Array<Contour> = Flatten.path(path, m, tolerance);
-		if (stroke != null)
-			Tessellate.stroke(flat, stroke, m.scale(), aa, mesh);
-		else
-			Tessellate.fill(flat, rule, aa, mesh);
+		if (stroke != null && !m.isConformal()) {
+			// Stroked at uniform scale, then stretched, so the width follows each axis.
+			var s = m.scale();
+			var flat:Array<Contour> = Flatten.path(path, Affine.scaling(s, s), tolerance);
+			Tessellate.stroke(flat, stroke, s, aa, mesh);
+			mesh.transformRange(from, mesh.vertexCount(), m.after(Affine.scaling(1 / s, 1 / s)));
+		} else {
+			var flat:Array<Contour> = Flatten.path(path, m, tolerance);
+			if (stroke != null)
+				Tessellate.stroke(flat, stroke, m.scale(), aa, mesh);
+			else
+				Tessellate.fill(flat, rule, aa, mesh);
+		}
 		if (known != null)
 			shapes.get(path.signature()).remove(known);
 		var sig = path.signature();

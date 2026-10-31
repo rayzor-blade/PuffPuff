@@ -78,6 +78,11 @@ class OpenFLScale9Scene {
 		expect("grid tall, top outline", 10 + 30, 112, OUTLINE);
 		expect("grid tall, below top outline", 10 + 30, 117, FILL);
 		expect("grid tall, middle", 10 + 30, 110 + 45, FILL);
+		// Without a grid a stroke stretches along each axis: 12 wide, 4 tall.
+		expect("plain wide, left outline", 240, 75, OUTLINE);
+		expect("plain wide, inside left outline", 246, 75, FILL);
+		expect("plain wide, top outline", 320, 62, OUTLINE);
+		expect("plain wide, below top outline", 320, 66, FILL);
 		if (failures.length > 0) throw 'OpenFL scale9Grid render wrong: ${failures.join(", ")}';
 		Sys.println("OpenFL scale9Grid render ok");
 	}
