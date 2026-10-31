@@ -14,6 +14,7 @@ import puffpuff.canvas.Paint;
 import puffpuff.canvas.Path;
 import puffpuff.canvas.Stroke;
 import puffpuff.gpu.QuadBatcher;
+import puffpuff.gpu.TriangleBatcher;
 import puffpuff.gpu.WgpuContext;
 import puffpuff.snapshot.Snapshot;
 import puffpuff.text.FontAtlas;
@@ -330,6 +331,7 @@ class Cases {
 		var frame = 0;
 
 		var quads = new QuadBatcher(null, 20000);
+		var triangles = new TriangleBatcher(null, 60000);
 
 		var vertices = 3000;
 		var source = new Mesh();
@@ -388,6 +390,23 @@ class Cases {
 				maxAllocPerOp: 0
 			},
 			{
+				name: "trianglebatcher.vertex",
+				ops: 10000,
+				run: () -> {
+					triangles.begin(null, false);
+					for (i in 0...10000) quadAsTriangles(triangles, (i % 100) * 5.0, Std.int(i / 100) * 5.0);
+				},
+				check: () -> {
+					triangles.begin(null, false);
+					for (i in 0...10000) quadAsTriangles(triangles, (i % 100) * 5.0, Std.int(i / 100) * 5.0);
+					var b = triangles.bytes;
+					return (triangles.length == 10000 * 6 * TriangleBatcher.BYTES && b.getFloat(0) == 0 && b.getFloat(4) == 0
+						&& b.getFloat(8) == 0 && b.getFloat(16) == 1 && b.getInt32(20) == 0xFFFFFFFF) ? null : 'unexpected vertex data';
+				},
+				checksum: () -> Harness.fnv(triangles.bytes, 0, triangles.length),
+				maxAllocPerOp: 0
+			},
+			{
 				name: "mesh.appendTranslated",
 				ops: vertices,
 				run: () -> {
@@ -409,6 +428,41 @@ class Cases {
 				maxAllocPerOp: 0
 			}
 		];
+	}
+
+	/** 8 pixel square at `x`, `y` as two triangles (six vertices). **/
+	static inline function quadAsTriangles(t:TriangleBatcher, x:Float, y:Float):Void {
+		t.vertex(x, y, 0, 0, 1, 0xFFFFFFFF);
+		t.vertex(x + 8, y, 1, 0, 1, 0xFFFFFFFF);
+		t.vertex(x, y + 8, 0, 1, 1, 0xFFFFFFFF);
+		t.vertex(x, y + 8, 0, 1, 1, 0xFFFFFFFF);
+		t.vertex(x + 8, y, 1, 0, 1, 0xFFFFFFFF);
+		t.vertex(x + 8, y + 8, 1, 1, 1, 0xFFFFFFFF);
+	}
+
+	/** The sprite frame's 5000 squares as 30000 triangle vertices, to compare the triangle path with instanced quads. **/
+	static function triangleDraw():puffpuff.gpu.WgpuContext3D->Void {
+		var batcher:TriangleBatcher = null;
+		var texture:puffpuff.gpu.WgpuContext3D.WgpuTexture = null;
+		var proj = new Matrix4();
+		proj.createOrtho(0, W, H, 0, -1, 1);
+		return c3 -> {
+			if (batcher == null) {
+				batcher = new TriangleBatcher(c3, 30000);
+				texture = c3.createTexture(4, 4);
+				var px = haxe.io.Bytes.alloc(64);
+				for (i in 0...16) {
+					px.set(i * 4, 255);
+					px.set(i * 4 + 1, 200);
+					px.set(i * 4 + 2, 60);
+					px.set(i * 4 + 3, 255);
+				}
+				texture.uploadFromBytes(px);
+			}
+			batcher.begin(texture, false);
+			for (i in 0...5000) quadAsTriangles(batcher, (i % 64) * 8.0, Std.int(i / 64) * 6.0);
+			batcher.flush(proj);
+		};
 	}
 
 	/** Persistent offscreen context. A frame is begin, draw, end, and `readback` adds the copy to the CPU. **/
@@ -642,6 +696,8 @@ class Cases {
 			gpuFrame("gpu.frame.vectors.readback", true, vectorDraw, vectorsDrawn),
 			gpuFrame("gpu.frame.sprites.submit", false, spriteDraw),
 			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
+			gpuFrame("gpu.frame.triangles.submit", false, triangleDraw),
+			gpuFrame("gpu.frame.triangles.readback", true, triangleDraw),
 			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(Cached)),
 			gpuFrame("gpu.frame.text.static.readback", true, labelsDraw(Cached)),
 			gpuFrame("gpu.frame.text.dynamic.submit", false, labelsDraw(Fresh)),
