@@ -18,6 +18,8 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 		@param var matrix:Mat4;
 		/** Added to each vertex's `paint`. Where this draw's records start in `paints`. **/
 		@param var paintBase:Float;
+		/** 1 writes color scaled by its alpha, for blend modes that take a premultiplied source. **/
+		@param var premultiply:Float;
 		@param var paints:StorageBuffer<Vec4>;
 		var pixel:Vec2;
 		var coverage:Float;
@@ -71,7 +73,10 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 			// Half a pixel inside every edge = fully covered; on the edge = half.
 			var inside = clamp(edgeDist + vec4(0.5, 0.5, 0.5, 0.5), vec4(0.0, 0.0, 0.0, 0.0), vec4(1.0, 1.0, 1.0, 1.0));
 			var covered = coverage * inside.x * inside.y * inside.z * inside.w;
-			output.color = vec4(color.rgb, color.a * head.z * covered);
+			var alpha = color.a * head.z * covered;
+			output.color = vec4(color.rgb, alpha);
+			if (premultiply > 0.5)
+				output.color = vec4(color.rgb * alpha, alpha);
 		}
 	};
 }

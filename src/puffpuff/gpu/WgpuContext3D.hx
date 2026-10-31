@@ -328,6 +328,9 @@ class WgpuContext3D {
 
 	/** Whether the next `drawQuadsInstanced` texture is premultiplied. Set the blend factors to match. **/
 	public var quadsPremultiplied:Bool = false;
+
+	/** Whether the next `drawVectorMesh` writes premultiplied color. Set the blend factors to match. **/
+	public var vectorsPremultiplied:Bool = false;
 	public var srcRgb:BlendFactor = BlendFactor.SrcAlpha;
 	public var dstRgb:BlendFactor = BlendFactor.OneMinusSrcAlpha;
 	public var opRgb:BlendOperation = BlendOperation.Add;
@@ -736,13 +739,13 @@ class WgpuContext3D {
 			vsEntry: "vertex",
 			fsEntry: "fragment",
 			targetFormat: targetFormat(),
-			blendEnabled: true,
-			srcRgb: BlendFactor.SrcAlpha,
-			dstRgb: BlendFactor.OneMinusSrcAlpha,
-			opRgb: BlendOperation.Add,
-			srcAlpha: BlendFactor.One,
-			dstAlpha: BlendFactor.OneMinusSrcAlpha,
-			opAlpha: BlendOperation.Add,
+			blendEnabled: blendEnabled,
+			srcRgb: srcRgb,
+			dstRgb: dstRgb,
+			opRgb: opRgb,
+			srcAlpha: srcAlpha,
+			dstAlpha: dstAlpha,
+			opAlpha: opAlpha,
 			colorWriteMask: ColorWrite.ALL,
 			depthWrite: false,
 			depthCompare: CompareFunction.Always,
@@ -765,6 +768,7 @@ class WgpuContext3D {
 		var uboBytes = Bytes.alloc(uboSize);
 		uboBytes.blit(VectorPathShader.PARAMS_matrix, matrix.buffer, matrix.byteOffset, 64);
 		uboBytes.setFloat(VectorPathShader.PARAMS_paintBase, paintBase);
+		uboBytes.setFloat(VectorPathShader.PARAMS_premultiply, vectorsPremultiplied ? 1.0 : 0.0);
 		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
 		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
 
