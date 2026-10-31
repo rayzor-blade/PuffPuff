@@ -9,11 +9,11 @@
   "releasenote": "Initial standalone release decoupled from ashui.",
   "contributors": ["rayzor", "darmie"],
   "dependencies": {
-    "hlwindow": "",
-    "hlwgpu": "",
-    "hlavi": "",
-    "ash-future": "",
-    "ash-simd": "",
+    "hlwindow": "0.3.2",
+    "hlwgpu": "0.2.0",
+    "hlavi": "0.1.2",
+    "ash-future": "0.1.1",
+    "ash-simd": "0.1.0",
     "hashlink": ""
   }
 }

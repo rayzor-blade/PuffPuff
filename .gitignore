@@ -16,3 +16,4 @@ tools/snapshot/bin/
 *.dll
 .DS_Store
 __pycache__/
+tests/package/bin/

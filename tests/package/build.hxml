@@ -1,0 +1,4 @@
+-lib puffpuff
+-cp tests/package
+-main Main
+-hl tests/package/bin/package-consumer.hl

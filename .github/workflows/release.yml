@@ -1,0 +1,84 @@
+name: release
+run-name: release ${{ inputs.release_tag || github.ref_name }}
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'v<version> to publish; leave empty to validate only'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: package and validate the Haxelib
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        env:
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
+        run: |
+          if [ -n "$TAG" ]; then
+            version=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from package_haxelib import version_of; print(version_of(sys.argv[1]))' "$TAG")
+            [ "$version" = "$(python3 -c 'import json; print(json.load(open("haxelib.json"))["version"])')" ] ||
+              { echo "haxelib.json version differs from $TAG"; exit 1; }
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - run: python3 scripts/package_haxelib.py release ${TAG:+--version "$TAG"}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+      - uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.6
+      - run: haxelib newrepo
+      - name: Install the package and its dependencies
+        run: |
+          haxelib install release/puffpuff.zip --always
+          haxelib list
+      - name: Compile a consumer against the installed package
+        run: haxe tests/package/build.hxml
+      - uses: actions/upload-artifact@v7
+        with:
+          name: puffpuff-haxelib
+          path: release/puffpuff.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: package
+    if: needs.package.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: puffpuff-haxelib
+          path: release
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.package.outputs.tag }}
+          files: release/puffpuff.zip
+          generate_release_notes: true
+
+  publish-haxelib:
+    name: publish to Haxelib
+    needs: [package, publish]
+    if: needs.package.outputs.tag != ''
+    uses: ./.github/workflows/publish.yml
+    with:
+      release_tag: ${{ needs.package.outputs.tag }}
+    secrets:
+      HAXELIB_PASSWORD: ${{ secrets.HAXELIB_PASSWORD }}
