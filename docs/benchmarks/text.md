@@ -82,12 +82,15 @@ per glyph (24 KB for the paragraph); `drawText`, which the frame cases use, read
 
 ## Known differences from OpenFL
 
-- **Hinted advances.** OpenFL native lays text out with each glyph's advance rounded to a whole pixel (it asks for hinting
-  unless `antiAliasType` is `ADVANCED` with sharpness 400 or more), and keeps kerning fractional. PuffPuff uses the
-  exact advances. For 14 px Arial that makes `a` 8 px against 7.79 px, "The quick brown fox" 128 px against 125.28 px,
-  and the same text up to a few percent wider on OpenFL, so a field can wrap at a different place. Rounding each
-  character's advance and adding the fractional kerning reproduces OpenFL's widths to within 0.01 px. The benchmark
-  paragraph comes out the same on both sides in lines (3) and height (48 px).
+- **Hinted advances.** OpenFL native lays text out with each glyph's advance rounded to a whole pixel, and keeps kerning
+  fractional. It does so for the default anti-aliasing and for `ADVANCED` below sharpness 400; at `ADVANCED` with
+  sharpness 400 or more it uses exact advances (measured, 14 px Arial). PuffPuff uses exact advances by default,
+  which match OpenFL's unhinted mode to within about 0.1 px. For 14 px Arial the hinted layout makes `a` 8 px against
+  7.79 px, "The quick brown fox" 128 px against 125.28 px, and the same text up to a few percent wider, so a field can
+  wrap at a different place. Setting `puffpuff.text.FontAtlas.hintedAdvances = true` makes PuffPuff round each
+  character's advance for text that asks for hinting (OpenFL's `autoHint`), and then the widths match OpenFL native: the
+  benchmark paragraph is 292.97 px in 3 lines on both, checked by `TextHintCheck` against widths measured on OpenFL.
+  It is off by default.
 
 ## Known weak spots
 
