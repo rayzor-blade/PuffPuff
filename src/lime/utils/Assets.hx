@@ -537,7 +537,7 @@ class Assets
 				else
 				{
 					libraries.set(id, library);
-					library.onChange.add(onChange.dispatch);
+					library.onChange.add(() -> onChange.dispatch());
 					promise.completeWith(library.load());
 				}
 			}).onError(function(error)
@@ -583,7 +583,7 @@ class Assets
 				else
 				{
 					libraries.set(id, library);
-					library.onChange.add(onChange.dispatch);
+					library.onChange.add(() -> onChange.dispatch());
 					promise.completeWith(library.load());
 				}
 			}).onError(function(error)
