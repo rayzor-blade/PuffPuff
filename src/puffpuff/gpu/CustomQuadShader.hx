@@ -25,12 +25,16 @@ class CustomQuadShader {
 		premultipliedAt = offsetOf("premultiplied");
 	}
 
-	/** The shader of `cls` or the nearest class above it that has HXSL source, or `null`. **/
+	/**
+	 * Shader for `cls` or the nearest class above it with HXSL source. `null` if there's none, or that class is marked
+	 * `HXSL_STOCK`, since its fragment stage is the stock one and the quad batch needs no shader of its own.
+	 */
 	public static function of(cls:Class<Dynamic>):Null<CustomQuadShader> {
 		var at = cls;
 		while (at != null) {
 			var wgsl:Null<String> = Reflect.field(at, "WGSL");
 			if (wgsl != null) {
+				if (Reflect.field(at, "HXSL_STOCK") == true) return null;
 				var name = Type.getClassName(at);
 				var shader = known.get(name);
 				if (shader == null) {

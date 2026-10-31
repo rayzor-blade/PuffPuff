@@ -8,7 +8,8 @@ package puffpuff.gpu.shaders;
  * - row 2: `[uvW, uvH, alpha, 0]`
  * - row 3: `[red, green, blue, 0]` multipliers
  * - row 4: `[red, green, blue, alpha]` offsets, 0 to 1
- * The colour is transformed unpremultiplied and written premultiplied.
+ * Color is transformed unpremultiplied and written premultiplied. A shader that `@:extends` this one replaces `fragment()`
+ * and can call `flixelTexture2D(uv)` for the transformed texel.
  */
 class OffsetQuadShader implements hlwgpu.hxsl.Shader {
 	static var SRC = {
@@ -50,13 +51,21 @@ class OffsetQuadShader implements hlwgpu.hxsl.Shader {
 			output.position = vec4(worldPos, 0.0, 1.0) * projection;
 		}
 
+		/** Bitmap at `uv` with the quad's color transform and alpha applied, premultiplied. Same as Flixel's `flixel_texture2D`. **/
+		function flixelTexture2D(uv:Vec2):Vec4 {
+			var tex = texture(bitmap, uv);
+			var result = vec4(0.0, 0.0, 0.0, 0.0);
+			if (tex.a > 0.0) {
+				var straight = tex;
+				if (premultiplied > 0.5) straight = vec4(tex.rgb / tex.a, tex.a);
+				var c = clamp(vOffset + vec4(straight.rgb * vMultiply, straight.a), 0.0, 1.0);
+				result = vec4(c.rgb * c.a * vAlpha, c.a * vAlpha);
+			}
+			return result;
+		}
+
 		function fragment() {
-			var tex = texture(bitmap, vUv);
-			if (tex.a == 0.0) discard;
-			var straight = tex;
-			if (premultiplied > 0.5) straight = vec4(tex.rgb / tex.a, tex.a);
-			var c = clamp(vOffset + vec4(straight.rgb * vMultiply, straight.a), 0.0, 1.0);
-			output.color = vec4(c.rgb * c.a * vAlpha, c.a * vAlpha);
+			output.color = flixelTexture2D(vUv);
 		}
 	};
 }

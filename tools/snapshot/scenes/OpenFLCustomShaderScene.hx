@@ -7,18 +7,19 @@ import openfl.geom.Rectangle;
 import puffpuff.snapshot.Headless;
 
 /**
- * A custom shader written in HXSL: it extends PuffPuff's quad shader and replaces the fragment stage, and a shader fill with
+ * Custom HXSL shader: extends `openfl.display.GraphicsShader`, replaces the fragment stage, and runs on a shader fill with
+ * `drawQuads`. Needs OpenFL with `-D openfl_wgpu`:
  * `drawQuads` runs it. Needs OpenFL with `-D openfl_wgpu`:
  *
  *   PUFFPUFF_HAXE_FLAGS="-cp ../openfl/src -D openfl=9.5.2 -D openfl_wgpu" tools/snapshot/run.sh tools/snapshot/scenes/OpenFLCustomShaderScene.hx
  */
-class FlashShader extends GraphicsShader implements hlwgpu.hxsl.Shader {
+class FlashShader extends GraphicsShader {
 	static var SRC = {
-		@:extends puffpuff.gpu.shaders.OffsetQuadShader;
+		@:extends openfl.display.GraphicsShader;
 		@param var flash:Float;
 		function fragment() {
-			var tex = texture(bitmap, vUv);
-			output.color = vec4(tex.rgb + vec3(flash, flash, flash) * tex.a, tex.a) * vAlpha;
+			var tex = flixelTexture2D(vUv);
+			output.color = vec4(tex.rgb + vec3(flash, flash, flash) * tex.a, tex.a);
 		}
 	};
 
