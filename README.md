@@ -12,7 +12,7 @@ haxelib install puffpuff
 
 Add `-lib puffpuff` to your build and compile for HashLink. Run the bytecode with [Ash](https://github.com/rayzor-blade/ash). Haxelib installs the other libraries it needs (`hlwgpu`, `hlwindow`, `hlavi`, `ash-future`, `ash-simd`, `hashlink`). It also bundles `blinc_abi`, which does text shaping, and the build copies it next to the `.hl` file.
 
-PuffPuff is only tested on macOS (Apple silicon) so far. The bundled `blinc_abi` covers Linux, macOS and Windows.
+PuffPuff is tested on macOS (Apple silicon) and Linux (x86_64, Intel graphics). The bundled `blinc_abi` also covers Linux aarch64, macOS x86_64 and Windows, which are untested.
 
 ## Use with OpenFL and HaxeFlixel
 
@@ -29,7 +29,7 @@ PuffPuff replaces Lime's backend and renders with WebGPU. OpenFL support is on t
 
 ## Testing without a window
 
-`tools/snapshot/run.sh Scene.hx` renders a scene offscreen and writes a PNG to `.puffpuff/snapshots`. Most scenes in `tools/snapshot/scenes` check pixels, so they double as tests.
+`tools/snapshot/run.sh Scene.hx` renders a scene offscreen and writes a PNG to `.puffpuff/snapshots`. Most scenes in `tools/snapshot/scenes` check pixels, so they double as tests. On Linux this still needs a running display server (Wayland or X).
 
 ## Benchmarks
 
