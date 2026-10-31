@@ -8,12 +8,12 @@ the comparison would be with Lime's native `Matrix4` and friends, not measured h
 <!-- bench-table prefixes="math.,simd." -->
 | Case | Operations per run | Median per operation | Allocation per operation |
 |---|---:|---:|---:|
-| `math.matrix4.append` | 1 | 7.7 ns | 0 B |
-| `math.matrix4.append.scalar` | 1 | 41.3 ns | 0 B |
-| `math.matrix3.concat` | 1 | 6.1 ns | 0 B |
-| `math.vector4.add` | 1 | 4.5 ns | 0 B |
+| `math.matrix4.append` | 1 | 7.9 ns | 0 B |
+| `math.matrix4.append.scalar` | 1 | 40.2 ns | 0 B |
+| `math.matrix3.concat` | 1 | 6.0 ns | 0 B |
+| `math.vector4.add` | 1 | 4.4 ns | 0 B |
 | `math.float32array.readwrite` | 2048 | 2.4 ns | 0 B |
-| `simd.batch.add.inplace` | 4096 | 0.2 ns | 0 B |
+| `simd.batch.add.inplace` | 4096 | 0.1 ns | 0 B |
 | `simd.batch.add.scalar` | 4096 | 0.6 ns | 0 B |
 <!-- /bench-table -->
 

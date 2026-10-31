@@ -8,18 +8,26 @@ The OpenFL side is a small OpenFL application (`tools/bench/openfl/src/Main.hx`)
 and run natively. The PuffPuff side is the `text.*` and `gpu.frame.text.*` cases below.
 
 <!-- openfl-comparison -->
-OpenFL 9.5.2 on Lime 8.3.2, hxcpp 4.3.2 release, 5 runs (2026-10-30); PuffPuff 20d72c3 on ash 0.1.14 (llvm tier); Apple M1 Pro.
+OpenFL 9.5.2 on Lime 8.3.2, hxcpp 4.3.2 release, 5 runs (2026-10-31); PuffPuff 4a27384 on ash 0.1.14 (llvm tier); Apple M1 Pro.
 
 | Measurement | OpenFL (ms) | PuffPuff (ms) | PuffPuff is |
 |---|---:|---:|---:|
-| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) | 0.628 | 0.010 | 60.6x faster |
-| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) (whole lines, for reference) | 0.628 | 0.043 | 14.7x faster |
-| 200 labels, static, per frame, PuffPuff submitted | 1.450 | 0.219 | 6.6x faster |
-| 200 labels, static, per frame, PuffPuff finished and read back | 1.450 | 1.118 | 1.3x faster |
-| 200 labels, text set every frame, PuffPuff submitted | 9.113 | 0.540 | 16.9x faster |
-| 200 labels, text set every frame, PuffPuff submitted (whole lines, for reference) | 9.113 | 3.107 | 2.9x faster |
-| 200 labels, text set every frame, PuffPuff finished and read back | 9.113 | 1.538 | 5.9x faster |
-| 200 labels, text set every frame, PuffPuff finished and read back (whole lines, for reference) | 9.113 | 4.518 | 2.0x faster |
+| TextField layout of a new wrapped paragraph (OpenFL's own code on each backend) | 0.596 | 0.058 | 10.2x faster |
+| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) | 0.596 | 0.011 | 56.2x faster |
+| New 133-character paragraph: layout (OpenFL, with wrapping) or shaping one line (PuffPuff) (whole lines, for reference) | 0.596 | 0.044 | 13.6x faster |
+| 200 labels, static, per frame, PuffPuff submitted | 1.513 | 0.219 | 6.9x faster |
+| 200 labels, static, per frame, PuffPuff finished and read back | 1.513 | 1.073 | 1.4x faster |
+| 200 labels, text set every frame, PuffPuff submitted | 9.140 | 0.549 | 16.7x faster |
+| 200 labels, text set every frame, PuffPuff submitted (whole lines, for reference) | 9.140 | 2.992 | 3.1x faster |
+| 200 labels, text set every frame, PuffPuff finished and read back | 9.140 | 1.493 | 6.1x faster |
+| 200 labels, text set every frame, PuffPuff finished and read back (whole lines, for reference) | 9.140 | 4.085 | 2.2x faster |
+
+The layout both sides computed for that paragraph (the same text, width 300 and 14 px `_sans`):
+
+| | Lines | Text width (px) | Text height (px) |
+|---|---:|---:|---:|
+| OpenFL | 3 | 292.97 | 48 |
+| PuffPuff | 3 | 288.44 | 48 |
 <!-- /openfl-comparison -->
 
 PuffPuff has one text path, in `blinc_abi`. It shapes each character once per style and subpixel phase, or the
@@ -41,8 +49,10 @@ which is how the engine alone works; they show what the cache saves and are not 
   for text the engine has not seen before; text it has seen is cheaper on both sides.
 - **Runtimes differ.** OpenFL is native code compiled by hxcpp; PuffPuff runs on Ash's JIT. The shaping itself is
   native code on both sides; the surrounding Haxe is compiled by hxcpp on one and JIT-compiled on the other.
-- **Not a `TextField` comparison yet.** PuffPuff's OpenFL backend does not draw `TextField` yet, so this compares the
-  two text paths directly, not the same program on both backends.
+- **Layout is the same program; the frame rows are not.** The first paragraph row runs OpenFL's own `TextField` layout
+  on both backends: hxcpp on one, PuffPuff's Lime layer on Ash on the other. The other paragraph rows and the frame
+  rows compare PuffPuff's text path with OpenFL's directly, not one program on both backends. PuffPuff measures 288.44 px
+  against OpenFL's 292.97 px for that paragraph because it uses exact advances unless hinting is asked for (below).
 
 ### Accuracy
 
@@ -56,17 +66,17 @@ to shaping whole (0 px). The check also forces a glyph atlas clear and confirms 
 <!-- bench-table prefixes="text.,gpu.frame.text." -->
 | Case | Operations per run | Median per operation | Allocation per operation |
 |---|---:|---:|---:|
-| `text.shape.paragraph` | 1 | 10.4 us | 24 KB |
-| `text.shape.paragraph.whole` | 1 | 42.8 us | 25 KB |
-| `text.shape.labels200` | 200 | 3.1 us | 6 KB |
-| `text.shape.labels200.whole` | 200 | 14.5 us | 6 KB |
-| `text.measure.labels200` | 200 | 1.7 us | 400 B |
-| `gpu.frame.text.static.submit` | 1 | 218.9 us | 3 KB |
-| `gpu.frame.text.static.readback` | 1 | 1.12 ms | 2.1 MB |
-| `gpu.frame.text.dynamic.submit` | 1 | 540.0 us | 67 KB |
-| `gpu.frame.text.dynamic.readback` | 1 | 1.54 ms | 2.2 MB |
-| `gpu.frame.text.dynamic.whole.submit` | 1 | 3.11 ms | 67 KB |
-| `gpu.frame.text.dynamic.whole.readback` | 1 | 4.52 ms | 2.2 MB |
+| `text.shape.paragraph` | 1 | 10.6 us | 24 KB |
+| `text.shape.paragraph.whole` | 1 | 43.8 us | 25 KB |
+| `text.shape.labels200` | 200 | 3.3 us | 6 KB |
+| `text.shape.labels200.whole` | 200 | 14.8 us | 6 KB |
+| `text.measure.labels200` | 200 | 1.8 us | 416 B |
+| `gpu.frame.text.static.submit` | 1 | 218.8 us | 3 KB |
+| `gpu.frame.text.static.readback` | 1 | 1.07 ms | 2.1 MB |
+| `gpu.frame.text.dynamic.submit` | 1 | 548.8 us | 70 KB |
+| `gpu.frame.text.dynamic.readback` | 1 | 1.49 ms | 2.2 MB |
+| `gpu.frame.text.dynamic.whole.submit` | 1 | 2.99 ms | 70 KB |
+| `gpu.frame.text.dynamic.whole.readback` | 1 | 4.08 ms | 2.2 MB |
 <!-- /bench-table -->
 
 - `text.shape.paragraph`: one 133 character line of new text each run, shaped and its glyphs placed.

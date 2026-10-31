@@ -8,11 +8,11 @@ draws vector graphics through OpenGL triangles or Cairo, and neither has been me
 <!-- bench-table prefixes="canvas2d.,mesh.,gpu.frame.vectors." -->
 | Case | Operations per run | Median per operation | Allocation per operation |
 |---|---:|---:|---:|
-| `canvas2d.build.cold` | 300 | 7.0 us | 17 KB |
-| `canvas2d.build.reused` | 64 | 391.2 ns | 72 B |
+| `canvas2d.build.cold` | 300 | 7.5 us | 17 KB |
+| `canvas2d.build.reused` | 64 | 387.0 ns | 72 B |
 | `mesh.appendTranslated` | 3000 | 1.8 ns | 0 B |
-| `gpu.frame.vectors.submit` | 1 | 506.3 us | 40 KB |
-| `gpu.frame.vectors.readback` | 1 | 1.47 ms | 2.1 MB |
+| `gpu.frame.vectors.submit` | 1 | 498.5 us | 40 KB |
+| `gpu.frame.vectors.readback` | 1 | 1.44 ms | 2.1 MB |
 <!-- /bench-table -->
 
 The scene is 300 shapes in a 20-column grid: circles, rounded rectangles and triangles filled with a solid colour, and

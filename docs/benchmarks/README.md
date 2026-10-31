@@ -50,7 +50,7 @@ the whole suite (reported to the Ash project), and a baseline from a failing run
 ## The baseline
 
 <!-- bench-meta -->
-PuffPuff `20d72c3` on ash 0.1.14, llvm tier, Apple M1 Pro.
+PuffPuff `4a27384` on ash 0.1.14, llvm tier, Apple M1 Pro.
 <!-- /bench-meta -->
 
 Stored in `tools/bench/baselines/`; per machine and per tier, so compare numbers only against the same machine.

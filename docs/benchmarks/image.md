@@ -11,9 +11,9 @@ because PuffPuff has no native image code. There is no OpenFL baseline yet: the 
 |---|---:|---:|---:|
 | `image.fillRect` | 65536 | 1.6 ns | 0 B |
 | `image.copyPixels` | 65536 | 0.1 ns | 0 B |
-| `image.copyPixels.merge` | 65536 | 100.4 ns | 128 B |
-| `image.getPixels` | 65536 | 42.9 ns | 68 B |
-| `image.setPixel32.row` | 256 | 6.0 ns | 0 B |
+| `image.copyPixels.merge` | 65536 | 100.7 ns | 128 B |
+| `image.getPixels` | 65536 | 43.6 ns | 68 B |
+| `image.setPixel32.row` | 256 | 5.9 ns | 0 B |
 <!-- /bench-table -->
 
 An operation is a pixel, except for `image.setPixel32.row`, where it is one `setPixel32` call (256 along a row).
