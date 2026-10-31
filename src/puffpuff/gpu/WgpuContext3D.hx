@@ -18,6 +18,8 @@ import gpu.GpuExtent3D;
 import gpu.GpuOrigin3D;
 import gpu.GpuPipeline;
 import gpu.GpuRenderPassColorAttachment;
+import gpu.GpuColor;
+import gpu.GpuRenderPassDepthStencilAttachment;
 import gpu.GpuRenderPassDescriptor;
 import gpu.LoadOp;
 import gpu.StoreOp;
@@ -233,9 +235,17 @@ class WgpuTexture {
 		this.gpuTexture = context.wgpu.device.texture(new GpuTextureDescriptor(
 			extent,
 			format,
-			TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC
+			usageOf(format)
 		));
 		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
+	}
+
+	/** Color textures are sampled, drawn into, uploaded to and read back. A depth texture is only drawn into. **/
+	static function usageOf(format:TextureFormat):Int {
+		return switch (format) {
+			case Depth16unorm, Depth24plus, Depth24plusStencil8, Depth32float, Depth32floatStencil8: TextureUsage.RENDER_ATTACHMENT;
+			default: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC;
+		}
 	}
 
 	public function uploadFromBytes(bytes:Bytes, bytesPerRow:Int = 0):Void {
@@ -273,7 +283,7 @@ class WgpuTexture {
 		this.gpuTexture = context.wgpu.device.texture(new GpuTextureDescriptor(
 			extent,
 			format,
-			TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC
+			usageOf(format)
 		));
 		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
 	}
@@ -320,6 +330,8 @@ class WgpuContext3D {
 	// Tracked Context3D state
 	public var blendEnabled:Bool = true;
 
+	static inline var DEPTH_FORMAT = TextureFormat.Depth24plus;
+
 	/** While enabled, draws are clipped to the scissor rectangle (target pixels from the top left). **/
 	public var scissorEnabled(default, null) = false;
 
@@ -355,6 +367,20 @@ class WgpuContext3D {
 	public var smoothing:Bool = true;
 	public var repeat:Bool = false;
 
+	/** Program for `drawProgram`. **/
+	public var program:Null<HxslProgram>;
+
+	/** Whether passes have a depth attachment. Draws and pipelines then all use it, so set it between passes. **/
+	public var depthEnabled(default, set):Bool = false;
+
+	private function set_depthEnabled(value:Bool):Bool {
+		if (value != depthEnabled) endRenderPass();
+		return depthEnabled = value;
+	}
+
+	private var depthTexture:Null<WgpuTexture>;
+	private var retiredTextures:Array<WgpuTexture> = [];
+	private var textureSlots:Array<Null<WgpuTexture>> = [];
 	private var currentShader:GpuShader;
 	private var activeTexture:Null<WgpuTexture>;
 	private var vertexBuffers:Map<Int, {buffer:WgpuVertexBuffer3D, offset:Int, format:VertexFormat}>;
@@ -434,6 +460,7 @@ class WgpuContext3D {
 	}
 
 	public function setTextureAt(samplerSlot:Int, texture:Null<WgpuTexture>):Void {
+		textureSlots[samplerSlot] = texture;
 		if (samplerSlot == 0) {
 			activeTexture = texture;
 		}
@@ -484,27 +511,50 @@ class WgpuContext3D {
 		return s;
 	}
 
-	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0):Void {
+	/**
+	 * Starts a pass on the target. Clears color to the given value if `clearR` is set, else keeps it. With depth enabled,
+	 * clears depth to `clearDepth` if that is set, else keeps it.
+	 */
+	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0, clearDepth:Null<Float> = null):Void {
 		if (passActive) return;
 		var enc = wgpu.currentEncoder;
 		var view = renderTarget != null ? renderTarget.view : wgpu.currentView;
 		if (enc == null || view == null) return;
 
-		if (clearR != null) {
+		if (clearR != null && !depthEnabled) {
 			enc.passReset();
 			enc.passColour(view, clearR, clearG, clearB, clearA);
 			enc.passBegin();
 		} else {
-			// `passColor` always clears; keeping prior contents needs an explicit `LoadOp.Load` attachment.
-			var attachment = new GpuRenderPassColorAttachment(LoadOp.Load, StoreOp.Store);
+			// `passColor` always clears and has no depth, so other passes spell out their attachments.
+			var attachment = new GpuRenderPassColorAttachment(clearR != null ? LoadOp.Clear : LoadOp.Load, StoreOp.Store);
 			attachment.viewTextureView(view);
+			if (clearR != null) attachment.clearValue(new GpuColor(clearR, clearG, clearB, clearA));
 			var desc = new GpuRenderPassDescriptor();
 			desc.addColorAttachments(attachment);
+			if (depthEnabled) {
+				var depth = new GpuRenderPassDepthStencilAttachment();
+				depth.viewTextureView(depthFor(targetWidth(), targetHeight()).view);
+				depth.depthLoadOp(clearDepth != null ? LoadOp.Clear : LoadOp.Load);
+				depth.depthStoreOp(StoreOp.Store);
+				depth.depthClearValue(clearDepth != null ? clearDepth : 1.0);
+				desc.depthStencilAttachment(depth);
+			}
 			enc.beginRenderPass(desc);
 		}
 		enc.renderSetViewport(0, 0, targetWidth(), targetHeight(), 0.0, 1.0);
 		passActive = true;
 		applyScissor();
+	}
+
+	/** Depth texture for a target of this size. One is kept, so a target of another size starts with cleared depth. **/
+	function depthFor(width:Int, height:Int):WgpuTexture {
+		if (depthTexture != null && (depthTexture.width != width || depthTexture.height != height)) {
+			retiredTextures.push(depthTexture);
+			depthTexture = null;
+		}
+		if (depthTexture == null) depthTexture = new WgpuTexture(this, width, height, DEPTH_FORMAT);
+		return depthTexture;
 	}
 
 	/**
@@ -602,7 +652,7 @@ class WgpuContext3D {
 			colorWriteMask: colorWriteMask,
 			depthWrite: depthWrite,
 			depthCompare: depthCompare,
-			depthFormat: null,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: cullMode,
 			frontFace: frontFace,
@@ -661,6 +711,105 @@ class WgpuContext3D {
 	}
 
 	/**
+	 * Draws indexed triangles with `program`. Vertex buffers bind to the shader's inputs by attribute location
+	 * (`setVertexBufferAt`), and textures by the order the shader declares them (`setTextureAt`). A slot with no texture
+	 * reads white. The uniform block is the program's `params` as they are now.
+	 */
+	public function drawProgram(indexBuffer:WgpuIndexBuffer3D, firstIndex:Int = 0, numTriangles:Int = -1):Void {
+		var program = this.program;
+		if (program == null || indexBuffer == null) return;
+
+		var locations = [for (location in vertexBuffers.keys()) location];
+		locations.sort((a, b) -> a - b);
+		var buffers:Array<WgpuVertexBuffer3D> = [];
+		var vbDescs:Array<VertexBufferLayoutDesc> = [];
+		for (location in locations) {
+			var entry = vertexBuffers.get(location);
+			var slot = buffers.indexOf(entry.buffer);
+			if (slot < 0) {
+				slot = buffers.length;
+				buffers.push(entry.buffer);
+				vbDescs.push({stride: entry.buffer.strideBytes, stepMode: VertexStepMode.Vertex, attributes: []});
+			}
+			vbDescs[slot].attributes.push({location: location, offset: entry.offset, format: entry.format});
+		}
+		if (buffers.length == 0) return;
+
+		var wasPassActive = passActive;
+		if (!wasPassActive) beginRenderPass(null);
+
+		var layout = program.layout;
+		var pipeline = pipelineCache.getOrCreate({
+			shader: shader(layout.key, layout.wgsl),
+			vsEntry: "vertex",
+			fsEntry: "fragment",
+			targetFormat: targetFormat(),
+			blendEnabled: blendEnabled,
+			srcRgb: srcRgb,
+			dstRgb: dstRgb,
+			opRgb: opRgb,
+			srcAlpha: srcAlpha,
+			dstAlpha: dstAlpha,
+			opAlpha: opAlpha,
+			colorWriteMask: colorWriteMask,
+			depthWrite: depthWrite,
+			depthCompare: depthCompare,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
+			topology: PrimitiveTopology.TriangleList,
+			cullMode: cullMode,
+			frontFace: frontFace,
+			vertexBuffers: vbDescs
+		});
+
+		var dev = wgpu.device;
+		var bindings = new GpuBindings();
+		var tempBuffers:Array<GpuBuffer> = [];
+		if (layout.paramsSize > 0) {
+			var ubo = dev.createBuffer(new GpuBufferDescriptor(layout.paramsSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
+			wgpu.queue.writeBuffer(ubo, 0, program.params, layout.paramsSize);
+			bindings.buffer(ubo);
+			tempBuffers.push(ubo);
+		}
+		var sampler = repeat ? linearRepeatSampler : (smoothing ? linearClampSampler : nearestClampSampler);
+		for (i in 0...layout.textures.length) {
+			var texture = textureSlots[i];
+			bindings.texture((texture != null ? texture : whiteTexture()).view);
+			bindings.sampler(sampler);
+		}
+
+		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
+		bindings.destroy();
+
+		var enc = wgpu.currentEncoder;
+		enc.renderSetPipeline(pipeline);
+		enc.renderSetBindGroup(0, bindGroup);
+		for (slot in 0...buffers.length) {
+			enc.renderSetVertexBuffer(slot, buffers[slot].gpuBuffer);
+			buffers[slot].storage.drawnFrame = frame;
+		}
+		enc.renderSetIndexBuffer(indexBuffer.gpuBuffer, IndexFormat.Uint16);
+		indexBuffer.storage.drawnFrame = frame;
+		var indexCount = numTriangles >= 0 ? numTriangles * 3 : indexBuffer.numIndices - firstIndex;
+		enc.renderDrawIndexedRange(indexCount, 1, firstIndex, 0, 0);
+
+		if (!wasPassActive) endRenderPass();
+
+		tempResources.push({buffers: tempBuffers, bindGroups: [bindGroup]});
+	}
+
+	var white:Null<WgpuTexture>;
+
+	function whiteTexture():WgpuTexture {
+		if (white == null) {
+			white = new WgpuTexture(this, 1, 1);
+			var pixel = Bytes.alloc(4);
+			pixel.fill(0, 4, 255);
+			white.uploadFromBytes(pixel);
+		}
+		return white;
+	}
+
+	/**
 	 * Instanced `drawQuads` / `Tilemap` fast-path using `InstancedQuadShader` and a GPU storage buffer.
 	 * Each quad in `instanceData` is 12 floats (3 Vec4s):
 	 *   [a, b, c, d, tx, ty, uvX, uvY, uvW, uvH, alpha, reserved]
@@ -696,7 +845,7 @@ class WgpuContext3D {
 			colorWriteMask: colorWriteMask,
 			depthWrite: depthWrite,
 			depthCompare: depthCompare,
-			depthFormat: null,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: CullMode.None,
 			frontFace: FrontFace.Ccw,
@@ -777,7 +926,7 @@ class WgpuContext3D {
 			colorWriteMask: colorWriteMask,
 			depthWrite: false,
 			depthCompare: CompareFunction.Always,
-			depthFormat: null,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: CullMode.None,
 			frontFace: FrontFace.Ccw,
@@ -842,7 +991,7 @@ class WgpuContext3D {
 			colorWriteMask: ColorWrite.ALL,
 			depthWrite: false,
 			depthCompare: CompareFunction.Always,
-			depthFormat: null,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: CullMode.None,
 			frontFace: FrontFace.Ccw,
@@ -905,7 +1054,7 @@ class WgpuContext3D {
 			colorWriteMask: ColorWrite.ALL,
 			depthWrite: false,
 			depthCompare: CompareFunction.Always,
-			depthFormat: null,
+			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: CullMode.None,
 			frontFace: FrontFace.Ccw,
@@ -954,6 +1103,8 @@ class WgpuContext3D {
 			}
 		}
 		tempResources.resize(0);
+		for (texture in retiredTextures) texture.dispose();
+		retiredTextures.resize(0);
 	}
 
 	public function dispose():Void {
@@ -966,6 +1117,7 @@ class WgpuContext3D {
 		if (bitmapFillShader.valid()) bitmapFillShader.destroy();
 		if (alphaMaskShader.valid()) alphaMaskShader.destroy();
 		if (instancedQuadShader.valid()) instancedQuadShader.destroy();
+		if (white != null) white.dispose();
 		for (s in lazyShaders) if (s.valid()) s.destroy();
 		lazyShaders.clear();
 		if (linearClampSampler.valid()) linearClampSampler.destroy();

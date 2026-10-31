@@ -6,7 +6,8 @@ import puffpuff.snapshot.Snapshot;
 
 /**
  * Snapshot scene testing WgpuContext3D, PipelineCache, HXSL stock shaders
- * (GraphicsShader, DisplayObjectShader, InstancedQuadShader), VertexBuffer3D, IndexBuffer3D, and WgpuTexture.
+ * (GraphicsShader, DisplayObjectShader, InstancedQuadShader), VertexBuffer3D, IndexBuffer3D, and WgpuTexture. The
+ * stock shaders draw the 2D panels on top. Below them, lit 3D meshes (see `Meshes3D`) share the same pass and depth buffer.
  */
 class Context3DScene {
 	static function createCheckerTextureBytes(size:Int):Bytes {
@@ -34,13 +35,16 @@ class Context3DScene {
 	static function main() {
 		var w = 640;
 		var h = 360;
+		var bandHeight = 280;
+		var total = h + bandHeight;
 
-		Snapshot.scene("context3d-scene", w, h, ctx -> {
+		Snapshot.scene("context3d-scene", w, total, ctx -> {
 			var c3d = ctx.wgpu.context3D;
 			var proj = new Matrix4();
-			proj.createOrtho(0, w, h, 0, -1, 1);
+			proj.createOrtho(0, w, total, 0, -1, 1);
 
-			c3d.beginRenderPass(0.08, 0.09, 0.14, 1.0);
+			c3d.depthEnabled = true;
+			c3d.beginRenderPass(0.08, 0.09, 0.14, 1.0, 1.0);
 
 			// 1. Untextured GraphicsShader quad (left card)
 			// 6 floats per vertex: [x, y, r, g, b, a]
@@ -105,6 +109,8 @@ class Context3DScene {
 				instData[base + 11] = 0.0;
 			}
 			c3d.drawQuadsInstanced(tex, proj, instData, quadCount);
+
+			Meshes3D.draw(c3d, 0.4, w / bandHeight, Meshes3D.band(h / total, bandHeight / total));
 
 			c3d.endRenderPass();
 
