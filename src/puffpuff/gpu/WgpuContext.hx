@@ -30,8 +30,14 @@ class WgpuContext {
 	public var height(default, null):Int;
 	public var vsync:Bool;
 
-	public var currentView(default, null):Null<GpuTextureView>;
-	public var currentEncoder(default, null):Null<GpuEncoder>;
+	/** The frame's target and encoder. When the frame was deferred, the first read starts it. **/
+	public var currentView(get, never):Null<GpuTextureView>;
+	public var currentEncoder(get, never):Null<GpuEncoder>;
+	private var view:Null<GpuTextureView>;
+	private var encoder:Null<GpuEncoder>;
+	/** A surface frame not acquired yet: it is acquired, and `pendingClear` applied, when something first uses it. **/
+	private var deferred = false;
+	private var pendingClear:Null<Array<Float>>;
 	public var context3D(get, null):WgpuContext3D;
 
 	private function get_context3D():WgpuContext3D {
@@ -97,21 +103,67 @@ class WgpuContext {
 		return ctx;
 	}
 
+	private function get_currentView():Null<GpuTextureView> {
+		start();
+		return view;
+	}
+
+	private function get_currentEncoder():Null<GpuEncoder> {
+		start();
+		return encoder;
+	}
+
+	private function start():Void {
+		if (deferred) {
+			deferred = false;
+			beginFrame();
+		}
+		var clear = pendingClear;
+		if (clear != null) {
+			pendingClear = null;
+			if (view != null && view.valid()) {
+				encoder.passReset();
+				encoder.passColour(view, clear[0], clear[1], clear[2], clear[3]);
+				encoder.passBegin();
+				encoder.renderEnd();
+			}
+		}
+	}
+
+	/**
+	 * Defers this frame's surface: nothing is acquired, cleared or presented unless something draws. A frame nobody draws
+	 * leaves the last presented image on screen, as a retained framebuffer does.
+	 */
+	public function deferFrame():Void {
+		deferred = true;
+		pendingClear = null;
+	}
+
+	/** Clears with the given color when the frame is first used. A frame nobody draws is left as it was. **/
+	public function clearLater(r:Float, g:Float, b:Float, a:Float = 1.0):Void {
+		pendingClear = [r, g, b, a];
+	}
+
+	public inline function clearColorLater(color:Int, alpha:Float = 1.0):Void {
+		clearLater(((color >> 16) & 0xFF) / 255.0, ((color >> 8) & 0xFF) / 255.0, (color & 0xFF) / 255.0, alpha);
+	}
+
 	public function beginOffscreen(view:GpuTextureView, width:Int, height:Int):Void {
 		this.width = Std.int(Math.max(1, width));
 		this.height = Std.int(Math.max(1, height));
-		this.currentView = view;
-		this.currentEncoder = device.encoder();
+		this.view = view;
+		this.encoder = device.encoder();
 	}
 
 	public function endOffscreen():Void {
+		pendingClear = null;
 		if (context3D != null) context3D.endRenderPass();
-		if (currentEncoder != null && currentEncoder.valid()) {
-			currentEncoder.submit(queue);
-			currentEncoder.destroy();
-			currentEncoder = null;
+		if (encoder != null && encoder.valid()) {
+			encoder.submit(queue);
+			encoder.destroy();
+			encoder = null;
 		}
-		currentView = null;
+		view = null;
 		device.poll();
 		if (context3D != null) {
 			context3D.flushTempResources();
@@ -130,26 +182,28 @@ class WgpuContext {
 
 	public function beginFrame():Null<GpuTextureView> {
 		if (!surface.valid() || !device.valid()) return null;
-		var view = surface.acquire();
-		if (!view.valid()) {
+		var acquired = surface.acquire();
+		if (!acquired.valid()) {
 			return null;
 		}
-		currentView = view;
-		currentEncoder = device.encoder();
-		return view;
+		view = acquired;
+		encoder = device.encoder();
+		return acquired;
 	}
 
 	/**
 	 * Clears the active swapchain surface with a solid RGBA color (0.0 - 1.0).
 	 */
 	public function clear(r:Float, g:Float, b:Float, a:Float = 1.0):Void {
-		if (currentView == null || !currentView.valid()) {
+		start();
+		if (view == null || !view.valid()) {
 			if (beginFrame() == null) return;
 		}
-		currentEncoder.passReset();
-		currentEncoder.passColour(currentView, r, g, b, a);
-		currentEncoder.passBegin();
-		currentEncoder.renderEnd();
+		pendingClear = null;
+		encoder.passReset();
+		encoder.passColour(view, r, g, b, a);
+		encoder.passBegin();
+		encoder.renderEnd();
 	}
 
 	/**
@@ -163,16 +217,18 @@ class WgpuContext {
 	}
 
 	public function endFrame():Void {
+		deferred = false;
+		pendingClear = null;
 		if (context3D != null) context3D.endRenderPass();
-		if (currentEncoder != null && currentEncoder.valid()) {
-			currentEncoder.submit(queue);
-			currentEncoder.destroy();
-			currentEncoder = null;
+		if (encoder != null && encoder.valid()) {
+			encoder.submit(queue);
+			encoder.destroy();
+			encoder = null;
 		}
-		if (currentView != null && currentView.valid()) {
+		if (view != null && view.valid()) {
 			queue.presentSurface(surface);
-			currentView.destroy();
-			currentView = null;
+			view.destroy();
+			view = null;
 		}
 		device.poll();
 		if (context3D != null) {
@@ -185,13 +241,13 @@ class WgpuContext {
 			context3D.dispose();
 			context3D = null;
 		}
-		if (currentEncoder != null && currentEncoder.valid()) {
-			currentEncoder.destroy();
-			currentEncoder = null;
+		if (encoder != null && encoder.valid()) {
+			encoder.destroy();
+			encoder = null;
 		}
-		if (currentView != null && currentView.valid()) {
-			currentView.destroy();
-			currentView = null;
+		if (view != null && view.valid()) {
+			view.destroy();
+			view = null;
 		}
 		if (surface.valid()) {
 			surface.destroy();

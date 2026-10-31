@@ -317,9 +317,7 @@ class Window {
 
 	@:noCompletion public function __renderFrame():Void {
 		if (__closed || !__nativeWindow.valid()) return;
-		var view = __wgpuContext.beginFrame();
-		if (view == null) return;
-
+		__wgpuContext.deferFrame();
 		__renderContents();
 		__wgpuContext.endFrame();
 	}
@@ -332,10 +330,11 @@ class Window {
 
 	private function __renderContents():Void {
 		var background = __attributes.context != null ? __attributes.context.background : null;
+		// Cleared when the frame is first drawn into: a frame OpenFL skips as unchanged keeps the last image.
 		if (background != null) {
-			__wgpuContext.clearColor(background, 1.0);
+			__wgpuContext.clearColorLater(background, 1.0);
 		} else {
-			__wgpuContext.clear(0.0, 0.0, 0.0, 1.0);
+			__wgpuContext.clearLater(0.0, 0.0, 0.0, 1.0);
 		}
 
 		__inFrame = true;
