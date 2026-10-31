@@ -80,6 +80,15 @@ to shaping whole (0 px). The check also forces a glyph atlas clear and confirms 
 Allocation in the text cases includes the benchmark building its own label strings. `prepare` allocates a result object
 per glyph (24 KB for the paragraph); `drawText`, which the frame cases use, reads the glyphs without making objects.
 
+## Known differences from OpenFL
+
+- **Hinted advances.** OpenFL native lays text out with each glyph's advance rounded to a whole pixel (it asks for hinting
+  unless `antiAliasType` is `ADVANCED` with sharpness 400 or more), and keeps kerning fractional. PuffPuff uses the
+  exact advances. For 14 px Arial that makes `a` 8 px against 7.79 px, "The quick brown fox" 128 px against 125.28 px,
+  and the same text up to a few percent wider on OpenFL, so a field can wrap at a different place. Rounding each
+  character's advance and adding the fractional kerning reproduces OpenFL's widths to within 0.01 px. The benchmark
+  paragraph comes out the same on both sides in lines (3) and height (48 px).
+
 ## Known weak spots
 
 - PuffPuff's text API does not wrap lines; OpenFL's `TextEngine` will do that from per-character advances once
