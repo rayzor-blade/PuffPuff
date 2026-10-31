@@ -119,6 +119,24 @@ class Offscreen {
 	 * Reads back `texture` (`COPY_SRC`) into `width * height * 4` tightly packed RGBA8 bytes.
 	 */
 	public function readRgba8(texture:GpuTexture, width:Int, height:Int):Bytes {
+		var out = readRaw(texture, width, height);
+		if (format == Bgra8unorm || format == Bgra8unormSrgb) {
+			var i = 0;
+			while (i < out.length) {
+				var b = out.get(i);
+				out.set(i, out.get(i + 2));
+				out.set(i + 2, b);
+				i += 4;
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * Reads back `texture` (`COPY_SRC`, 4 bytes a pixel) into `width * height * 4` tightly packed bytes, in the texture's
+	 * own channel order.
+	 */
+	public function readRaw(texture:GpuTexture, width:Int, height:Int):Bytes {
 		// WebGPU buffer-to-texture copies require 256-byte row alignment.
 		var stride = (width * 4 + 255) & ~255;
 		var totalSize:haxe.Int64 = stride * height;
@@ -147,16 +165,6 @@ class Offscreen {
 		for (y in 0...height) {
 			out.blit(y * row, padded, y * stride, row);
 		}
-		if (format == Bgra8unorm || format == Bgra8unormSrgb) {
-			var i = 0;
-			while (i < out.length) {
-				var b = out.get(i);
-				out.set(i, out.get(i + 2));
-				out.set(i + 2, b);
-				i += 4;
-			}
-		}
 		return out;
 	}
 }
-
