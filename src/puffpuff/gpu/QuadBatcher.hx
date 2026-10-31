@@ -13,6 +13,11 @@ class QuadBatcher {
 	public var capacity(default, null):Int;
 	public var count(default, null):Int = 0;
 	public var texture:Null<WgpuTexture>;
+
+	/** Shader for this batch's quads (null for the stock one) and its uniform block parameters. **/
+	public var custom:Null<CustomQuadShader>;
+
+	public var params:Null<haxe.io.Bytes>;
 	public var instanceData(default, null):Float32Array;
 
 	/** Floats per instance: 12, or 20 for `addOffsetQuad`. **/
@@ -160,7 +165,7 @@ class QuadBatcher {
 
 	public function flush(projection:Matrix4):Void {
 		if (count <= 0 || texture == null) return;
-		context3D.drawQuadsInstanced(texture, projection, instanceData, count, floats == 20);
+		context3D.drawQuadsInstanced(texture, projection, instanceData, count, floats == 20, custom, params);
 		count = 0;
 	}
 }

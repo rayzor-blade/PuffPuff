@@ -670,7 +670,9 @@ class WgpuContext3D {
 		projection:Matrix4,
 		instanceData:Float32Array,
 		quadCount:Int,
-		offsets:Bool = false
+		offsets:Bool = false,
+		custom:Null<CustomQuadShader> = null,
+		params:Null<Bytes> = null
 	):Void {
 		if (texture == null || quadCount <= 0) return;
 
@@ -680,7 +682,7 @@ class WgpuContext3D {
 		}
 
 		var pipeline = pipelineCache.getOrCreate({
-			shader: offsets ? shader("offsetQuad", OffsetQuadShader.WGSL) : instancedQuadShader,
+			shader: custom != null ? shader(custom.key, custom.wgsl) : (offsets ? shader("offsetQuad", OffsetQuadShader.WGSL) : instancedQuadShader),
 			vsEntry: "vertex",
 			fsEntry: "fragment",
 			targetFormat: targetFormat(),
@@ -702,10 +704,13 @@ class WgpuContext3D {
 		});
 
 		var dev = wgpu.device;
-		var uboSize = offsets ? OffsetQuadShader.PARAMS_SIZE : InstancedQuadShader.PARAMS_SIZE;
+		var uboSize = custom != null ? custom.paramsSize : (offsets ? OffsetQuadShader.PARAMS_SIZE : InstancedQuadShader.PARAMS_SIZE);
 		var uboBytes = Bytes.alloc(uboSize);
-		uboBytes.blit(0, projection.buffer, projection.byteOffset, 64);
-		uboBytes.setFloat(offsets ? OffsetQuadShader.PARAMS_premultiplied : InstancedQuadShader.PARAMS_premultiplied, quadsPremultiplied ? 1.0 : 0.0);
+		if (custom != null && params != null) uboBytes.blit(0, params, 0, uboSize);
+		var projectionAt = custom != null ? custom.projectionAt : 0;
+		var premultipliedAt = custom != null ? custom.premultipliedAt : (offsets ? OffsetQuadShader.PARAMS_premultiplied : InstancedQuadShader.PARAMS_premultiplied);
+		if (projectionAt >= 0) uboBytes.blit(projectionAt, projection.buffer, projection.byteOffset, 64);
+		if (premultipliedAt >= 0) uboBytes.setFloat(premultipliedAt, quadsPremultiplied ? 1.0 : 0.0);
 		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
 		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
 
