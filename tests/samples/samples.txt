@@ -1,0 +1,48 @@
+# repo, path, status, note. Status: run (a Sprite sample the host runs), console (runs, draws nothing), port (GLSL to rewrite in HXSL), stage3d (needs Stage3D support),
+# gl, media, hardware, browser, swf (not runnable yet), lime (a Lime Application sample; the host does not run these yet).
+openfl-samples	demos/BunnyMark	run	sprite throughput
+openfl-samples	demos/HerokuShaders	port	GLSL fragment shaders; rewrite in HXSL
+openfl-samples	demos/NyanCat	swf	loads a SWF animation library; needs the swf library
+openfl-samples	demos/PiratePig	media	needs sound assets, which have no audio support yet; also uses filters
+openfl-samples	demos/TextAlignment	run	
+openfl-samples	demos/TextMetrics	run	
+openfl-samples	demos/TicTacToe	run	
+openfl-samples	demos/WorldClock	run	
+openfl-samples	features/display/AddingAnimation	run	needs the actuate haxelib
+openfl-samples	features/display/AnimatedTilemap	run	
+openfl-samples	features/display/CompareBitmapData	run	
+openfl-samples	features/display/CustomPreloader	run	
+openfl-samples	features/display/CustomRendering	gl	renders through OpenGL calls
+openfl-samples	features/display/DisplayingABitmap	run	
+openfl-samples	features/display/DrawingShapes	run	
+openfl-samples	features/display/SimpleTilemap	run	
+openfl-samples	features/display/UsingBitmapData	run	
+openfl-samples	features/display/WritingCustomShaders	port	GLSL shaders and filters; rewrite in HXSL
+openfl-samples	features/display3D/GLSLBitmap	stage3d	Stage3D with a GLSL program
+openfl-samples	features/display3D/HelloTriangle	stage3d	Stage3D, AGAL program
+openfl-samples	features/display3D/Stage3DCamera	stage3d	Stage3D, AGAL program, camera
+openfl-samples	features/display3D/Stage3DMipmap	stage3d	Stage3D mipmaps
+openfl-samples	features/events/CreatingAMainLoop	run	
+openfl-samples	features/events/CreatingCustomEvents	console	only traces; draws nothing
+openfl-samples	features/events/HandlingKeyboardEvents	run	first frame only; needs a live window for input
+openfl-samples	features/events/HandlingMouseEvents	run	first frame only; needs a live window for input; needs the actuate haxelib
+openfl-samples	features/external/BrowserExternalInterface	browser	runs in a browser only
+openfl-samples	features/media/PlayingSound	media	no audio output yet
+openfl-samples	features/media/PlayingVideo	media	no video yet
+openfl-samples	features/text/AddingText	run	
+openfl-samples	features/ui/GamepadInput	hardware	needs a gamepad
+openfl-samples	features/ui/JoystickInput	hardware	needs a joystick
+openfl-samples	libraries/actuate/ActuateExample	run	needs the actuate haxelib
+openfl-samples	libraries/box2d/SimpleBox2D	run	needs the box2d haxelib
+openfl-samples	libraries/layout/SimpleSWFLayout	swf	needs the layout and swf libraries
+lime-samples	demos/BunnyMark	lime	Lime Application sample; uses OpenGL
+lime-samples	demos/GameOfLife	lime	Lime Application sample; uses OpenGL
+lime-samples	demos/HelloWorld	lime	Lime Application sample
+lime-samples	demos/HerokuShaders	lime	Lime Application sample; GLSL shaders
+lime-samples	features/app/OpenWindow	lime	Lime Application sample
+lime-samples	features/graphics/SimpleImage	lime	Lime Application sample; uses OpenGL and Cairo
+lime-samples	features/input/GamepadInput	lime	Lime Application sample; needs a gamepad
+lime-samples	features/input/HandlingInputEvents	lime	Lime Application sample; needs a live window
+lime-samples	features/media/SimpleAudio	lime	Lime Application sample; no audio output yet
+lime-samples	features/media/SimpleVideo	lime	Lime Application sample; uses OpenGL
+lime-samples	features/text/TextRendering	lime	Lime Application sample; uses Cairo

@@ -1,0 +1,2 @@
+openfl-samples https://github.com/openfl/openfl-samples.git 56422354da339e13dea1be35de42113deda7bb05
+lime-samples https://github.com/openfl/lime-samples.git 3e0eef1b4ccc8f09b161ed37d13a761e1b76b582

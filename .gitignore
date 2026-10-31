@@ -17,3 +17,4 @@ tools/snapshot/bin/
 .DS_Store
 __pycache__/
 tests/package/bin/
+tests/samples/.cache/
