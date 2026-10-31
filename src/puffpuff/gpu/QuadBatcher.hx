@@ -15,10 +15,14 @@ class QuadBatcher {
 	public var texture:Null<WgpuTexture>;
 	public var instanceData(default, null):Float32Array;
 
-	public function new(context3D:WgpuContext3D, initialCapacity:Int = 2048) {
+	/** Floats per instance: 12, or 20 for `addOffsetQuad`. **/
+	final floats:Int;
+
+	public function new(context3D:WgpuContext3D, initialCapacity:Int = 2048, offsets:Bool = false) {
 		this.context3D = context3D;
 		this.capacity = initialCapacity;
-		this.instanceData = new Float32Array(initialCapacity * 12);
+		this.floats = offsets ? 20 : 12;
+		this.instanceData = new Float32Array(initialCapacity * floats);
 	}
 
 	public inline function begin(texture:WgpuTexture):Void {
@@ -33,8 +37,8 @@ class QuadBatcher {
 		if (needed <= capacity) return;
 		var newCap = capacity * 2;
 		while (newCap < needed) newCap *= 2;
-		var next = new Float32Array(newCap * 12);
-		next.buffer.blit(0, instanceData.buffer, 0, count * 48);
+		var next = new Float32Array(newCap * floats);
+		next.buffer.blit(0, instanceData.buffer, 0, count * floats * 4);
 		instanceData = next;
 		capacity = newCap;
 	}
@@ -63,6 +67,42 @@ class QuadBatcher {
 		buf.setFloat(off + 36, uvH);
 		buf.setFloat(off + 40, alpha);
 		buf.setFloat(off + 44, tintRgb & 0xFFFFFF);
+		count++;
+	}
+
+	/**
+	 * Adds a quad with a color transform. Multipliers are 0 or more, offsets 0 to 1, and alpha has its own multiplier and
+	 * offset.
+	 */
+	public function addOffsetQuad(
+		a:Float, b:Float, c:Float, d:Float, tx:Float, ty:Float,
+		uvX:Float, uvY:Float, uvW:Float, uvH:Float, alpha:Float,
+		multiplyR:Float, multiplyG:Float, multiplyB:Float,
+		offsetR:Float, offsetG:Float, offsetB:Float, offsetA:Float
+	):Void {
+		ensureCapacity(count + 1);
+		var buf = instanceData.buffer;
+		var off = instanceData.byteOffset + count * 80;
+		buf.setFloat(off, a);
+		buf.setFloat(off + 4, b);
+		buf.setFloat(off + 8, c);
+		buf.setFloat(off + 12, d);
+		buf.setFloat(off + 16, tx);
+		buf.setFloat(off + 20, ty);
+		buf.setFloat(off + 24, uvX);
+		buf.setFloat(off + 28, uvY);
+		buf.setFloat(off + 32, uvW);
+		buf.setFloat(off + 36, uvH);
+		buf.setFloat(off + 40, alpha);
+		buf.setFloat(off + 44, 0);
+		buf.setFloat(off + 48, multiplyR);
+		buf.setFloat(off + 52, multiplyG);
+		buf.setFloat(off + 56, multiplyB);
+		buf.setFloat(off + 60, 0);
+		buf.setFloat(off + 64, offsetR);
+		buf.setFloat(off + 68, offsetG);
+		buf.setFloat(off + 72, offsetB);
+		buf.setFloat(off + 76, offsetA);
 		count++;
 	}
 
@@ -120,7 +160,7 @@ class QuadBatcher {
 
 	public function flush(projection:Matrix4):Void {
 		if (count <= 0 || texture == null) return;
-		context3D.drawQuadsInstanced(texture, projection, instanceData, count);
+		context3D.drawQuadsInstanced(texture, projection, instanceData, count, floats == 20);
 		count = 0;
 	}
 }

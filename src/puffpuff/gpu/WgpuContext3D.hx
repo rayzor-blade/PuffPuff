@@ -48,6 +48,7 @@ import puffpuff.gpu.shaders.BitmapFillShader;
 import puffpuff.gpu.shaders.DisplayObjectShader;
 import puffpuff.gpu.shaders.GraphicsShader;
 import puffpuff.gpu.shaders.InstancedQuadShader;
+import puffpuff.gpu.shaders.OffsetQuadShader;
 import puffpuff.gpu.shaders.TexturedTriangleShader;
 import puffpuff.gpu.shaders.VectorPathShader;
 
@@ -668,7 +669,8 @@ class WgpuContext3D {
 		texture:WgpuTexture,
 		projection:Matrix4,
 		instanceData:Float32Array,
-		quadCount:Int
+		quadCount:Int,
+		offsets:Bool = false
 	):Void {
 		if (texture == null || quadCount <= 0) return;
 
@@ -678,7 +680,7 @@ class WgpuContext3D {
 		}
 
 		var pipeline = pipelineCache.getOrCreate({
-			shader: instancedQuadShader,
+			shader: offsets ? shader("offsetQuad", OffsetQuadShader.WGSL) : instancedQuadShader,
 			vsEntry: "vertex",
 			fsEntry: "fragment",
 			targetFormat: targetFormat(),
@@ -700,14 +702,14 @@ class WgpuContext3D {
 		});
 
 		var dev = wgpu.device;
-		var uboSize = InstancedQuadShader.PARAMS_SIZE;
+		var uboSize = offsets ? OffsetQuadShader.PARAMS_SIZE : InstancedQuadShader.PARAMS_SIZE;
 		var uboBytes = Bytes.alloc(uboSize);
 		uboBytes.blit(0, projection.buffer, projection.byteOffset, 64);
-		uboBytes.setFloat(InstancedQuadShader.PARAMS_premultiplied, quadsPremultiplied ? 1.0 : 0.0);
+		uboBytes.setFloat(offsets ? OffsetQuadShader.PARAMS_premultiplied : InstancedQuadShader.PARAMS_premultiplied, quadsPremultiplied ? 1.0 : 0.0);
 		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
 		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
 
-		var storageByteLen = quadCount * 48; // 3 * Vec4 (16 bytes) = 48 bytes per quad
+		var storageByteLen = quadCount * (offsets ? 80 : 48); // 3 or 5 Vec4 (16 bytes) per quad
 		var storageBuf = dev.createBuffer(new GpuBufferDescriptor(storageByteLen, BufferUsage.STORAGE | BufferUsage.COPY_DST));
 		var rawInstBytes = instanceData.byteOffset == 0 ? instanceData.buffer : instanceData.buffer.sub(instanceData.byteOffset, storageByteLen);
 		wgpu.queue.writeBuffer(storageBuf, 0, rawInstBytes, storageByteLen);

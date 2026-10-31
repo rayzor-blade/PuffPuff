@@ -331,6 +331,7 @@ class Cases {
 		var frame = 0;
 
 		var quads = new QuadBatcher(null, 20000);
+		var offsetQuads = new QuadBatcher(null, 20000, true);
 		var triangles = new TriangleBatcher(null, 60000);
 
 		var vertices = 3000;
@@ -386,6 +387,25 @@ class Cases {
 				checksum: () -> {
 					var f:Float32Array = @:privateAccess quads.instanceData;
 					return Harness.fnv(f.buffer, f.byteOffset, 10000 * 48);
+				},
+				maxAllocPerOp: 0
+			},
+			{
+				name: "quadbatcher.addOffsetQuad",
+				ops: 10000,
+				run: () -> {
+					offsetQuads.begin(null);
+					for (i in 0...10000) offsetQuads.addOffsetQuad(16, 0, 0, 16, (i % 100) * 5.0, Std.int(i / 100) * 5.0, 0, 0, 1, 1, 1.0, 1, 1, 1, 0.5, 0, 0, 0);
+				},
+				check: () -> {
+					offsetQuads.begin(null);
+					for (i in 0...10000) offsetQuads.addOffsetQuad(16, 0, 0, 16, (i % 100) * 5.0, Std.int(i / 100) * 5.0, 0, 0, 1, 1, 1.0, 1, 1, 1, 0.5, 0, 0, 0);
+					var f:Float32Array = @:privateAccess offsetQuads.instanceData;
+					return (f[0] == 16 && f[4] == 0 && f[(9999 * 20) + 5] == 99 * 5.0 && f[(9999 * 20) + 16] == 0.5) ? null : 'unexpected instance data';
+				},
+				checksum: () -> {
+					var f:Float32Array = @:privateAccess offsetQuads.instanceData;
+					return Harness.fnv(f.buffer, f.byteOffset, 10000 * 80);
 				},
 				maxAllocPerOp: 0
 			},
