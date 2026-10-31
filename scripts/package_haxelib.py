@@ -2,6 +2,7 @@
 """Package puffpuff as a Haxelib archive."""
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -108,10 +109,31 @@ def version_of(tag: str) -> str:
     return version
 
 
-def package(output_dir: Path, version: str | None = None) -> Path:
+def sha256_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def native_libraries(assets: Path) -> dict[str, Path]:
+    """The pinned blinc_abi libraries in `assets`, checked against the checksums in native/hdlls.json."""
+    manifest = json.loads((ROOT / "native/hdlls.json").read_text())
+    if not manifest["source"]["tag"]:
+        raise ValueError("native/hdlls.json has no release tag: run scripts/pin_native.py")
+    found = {}
+    for platform, entry in manifest["platforms"].items():
+        path = assets / entry["releaseAsset"]
+        if not path.is_file():
+            raise ValueError(f"missing native library {path}")
+        if sha256_of(path) != entry["sha256"]:
+            raise ValueError(f"{entry['releaseAsset']} does not match its checksum in native/hdlls.json")
+        found[entry["packagePath"]] = path
+    return found
+
+
+def package(output_dir: Path, version: str | None = None, assets: Path | None = None) -> Path:
     lib = json.loads((ROOT / "haxelib.json").read_text())
     if version:
         lib["version"] = version
+    natives = native_libraries(assets) if assets else {}
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{lib['name']}.zip"
     with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
@@ -119,6 +141,9 @@ def package(output_dir: Path, version: str | None = None) -> Path:
         archive.write(ROOT / "LICENSE", "LICENSE")
         archive.writestr("README.md", release_readme(ROOT / "README.md"))
         archive.write(ROOT / "extraParams.hxml", "extraParams.hxml")
+        archive.write(ROOT / "native/hdlls.json", "native/hdlls.json")
+        for package_path, path in natives.items():
+            archive.write(path, package_path)
         for directory in (lib["classPath"], "fonts"):
             for source in sorted((ROOT / directory).rglob("*")):
                 if source.is_file() and source.name != ".DS_Store":
@@ -130,10 +155,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to write puffpuff.zip into")
     parser.add_argument("--version", help="release tag to stamp into the package")
+    parser.add_argument("--assets", type=Path, help="directory holding the native/hdlls.json release assets")
+    parser.add_argument("--without-native", action="store_true", help="skip the native libraries; the package cannot be published")
     args = parser.parse_args()
+    if not args.assets and not args.without_native:
+        parser.error("pass --assets, or --without-native for a package that is not published")
     try:
         version = version_of(args.version) if args.version else None
-        print(f"wrote {package(args.output, version)}")
+        print(f"wrote {package(args.output, version, args.assets)}")
     except ValueError as error:
         parser.error(str(error))
 

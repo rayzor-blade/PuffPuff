@@ -45,6 +45,9 @@ class DefaultFonts {
 			candidates.push(Path.join([envDir, "blinc_abi.hdll"]));
 			candidates.push(Path.join([envDir, "libblinc_abi.dylib"]));
 		}
+		var bundled = NativeInstall.blincAbi();
+		if (bundled != null)
+			candidates.push(bundled);
 		candidates.push(Path.join([root, "..", "blinc_abi", "target", "release", "libblinc_abi.dylib"]));
 		candidates.push(Path.join([root, "..", "ashui", "tools", "snapshot", "bin", "blinc_abi.hdll"]));
 		var debug = Path.join([root, "..", "blinc_abi", "target", "debug", "libblinc_abi.dylib"]);
@@ -61,6 +64,9 @@ class DefaultFonts {
 				return;
 			}
 		}
+
+		if (!Context.defined("puffpuff_no_hdll"))
+			Context.warning("blinc_abi.hdll not found. Text needs it: set PUFFPUFF_NATIVE_DIR, or define puffpuff_no_hdll to supply it yourself.", Context.currentPos());
 	}
 }
 #end

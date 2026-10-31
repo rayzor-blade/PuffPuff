@@ -36,7 +36,15 @@ jobs:
               { echo "haxelib.json version differs from $TAG"; exit 1; }
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - run: python3 scripts/package_haxelib.py release ${TAG:+--version "$TAG"}
+      - name: Download the pinned blinc_abi libraries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source=$(python3 -c 'import json; s = json.load(open("native/hdlls.json"))["source"]; print(s["repository"], s["tag"])')
+          set -- $source
+          [ -n "$2" ] || { echo "native/hdlls.json has no release tag: run scripts/pin_native.py"; exit 1; }
+          gh release download "$2" --repo "$1" --pattern 'blinc_abi-*.hdll' --dir native-assets
+      - run: python3 scripts/package_haxelib.py release --assets native-assets ${TAG:+--version "$TAG"}
         env:
           TAG: ${{ steps.version.outputs.tag }}
       - uses: krdlab/setup-haxe@v2
@@ -47,8 +55,10 @@ jobs:
         run: |
           haxelib install release/puffpuff.zip --always
           haxelib list
-      - name: Compile a consumer against the installed package
-        run: haxe tests/package/build.hxml
+      - name: Compile a consumer and check the native library is staged
+        run: |
+          haxe tests/package/build.hxml
+          cmp native-assets/blinc_abi-linux-x86_64.hdll tests/package/bin/blinc_abi.hdll
       - uses: actions/upload-artifact@v7
         with:
           name: puffpuff-haxelib
