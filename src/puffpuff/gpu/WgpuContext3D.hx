@@ -48,6 +48,7 @@ import puffpuff.gpu.shaders.BitmapFillShader;
 import puffpuff.gpu.shaders.DisplayObjectShader;
 import puffpuff.gpu.shaders.GraphicsShader;
 import puffpuff.gpu.shaders.InstancedQuadShader;
+import puffpuff.gpu.shaders.TexturedTriangleShader;
 import puffpuff.gpu.shaders.VectorPathShader;
 
 /**
@@ -328,6 +329,14 @@ class WgpuContext3D {
 
 	/** Whether the next `drawQuadsInstanced` texture is premultiplied. Set the blend factors to match. **/
 	public var quadsPremultiplied:Bool = false;
+
+	/** Whether the next `drawTexturedTriangles` texture is premultiplied. Set the blend factors to match. **/
+	public var trianglesPremultiplied:Bool = false;
+
+	var triangleBuffer:Null<GpuBuffer>;
+	var triangleCapacity = 0;
+	var triangleUsed = 0;
+	var triangleFrame = -1;
 
 	/** Whether the next `drawVectorMesh` writes premultiplied color. Set the blend factors to match. **/
 	public var vectorsPremultiplied:Bool = false;
@@ -725,6 +734,83 @@ class WgpuContext3D {
 	}
 
 	/**
+	 * Draws a triangle list of `TriangleBatcher` vertices (24 bytes: position, uvt, color) textured with `texture`. Vertices
+	 * append to one buffer per frame, so a draw never rewrites what an earlier draw this frame reads.
+	 */
+	public function drawTexturedTriangles(texture:WgpuTexture, repeat:Bool, projection:Matrix4, vertices:Bytes, length:Int):Void {
+		if (texture == null || length < 72) return;
+		var wasPassActive = passActive;
+		if (!wasPassActive) beginRenderPass(null);
+
+		var dev = wgpu.device;
+		if (triangleFrame != frame) {
+			triangleFrame = frame;
+			triangleUsed = 0;
+		}
+		if (triangleBuffer == null || triangleUsed + length > triangleCapacity) {
+			if (triangleBuffer != null) retire(triangleBuffer);
+			triangleCapacity = Std.int(Math.max(triangleCapacity * 2, length + (length >> 1)));
+			triangleBuffer = dev.createBuffer(new GpuBufferDescriptor(triangleCapacity, BufferUsage.VERTEX | BufferUsage.COPY_DST));
+			triangleUsed = 0;
+		}
+		wgpu.queue.writeBuffer(triangleBuffer, triangleUsed, vertices, length);
+
+		var pipeline = pipelineCache.getOrCreate({
+			shader: shader("texturedTriangle", TexturedTriangleShader.WGSL),
+			vsEntry: "vertex",
+			fsEntry: "fragment",
+			targetFormat: targetFormat(),
+			blendEnabled: blendEnabled,
+			srcRgb: srcRgb,
+			dstRgb: dstRgb,
+			opRgb: opRgb,
+			srcAlpha: srcAlpha,
+			dstAlpha: dstAlpha,
+			opAlpha: opAlpha,
+			colorWriteMask: colorWriteMask,
+			depthWrite: false,
+			depthCompare: CompareFunction.Always,
+			depthFormat: null,
+			topology: PrimitiveTopology.TriangleList,
+			cullMode: CullMode.None,
+			frontFace: FrontFace.Ccw,
+			vertexBuffers: [{
+				stride: 24,
+				stepMode: VertexStepMode.Vertex,
+				attributes: [
+					{location: 0, offset: 0, format: VertexFormat.Float32x2},
+					{location: 1, offset: 8, format: VertexFormat.Float32x3},
+					{location: 2, offset: 20, format: VertexFormat.Unorm8x4}
+				]
+			}]
+		});
+
+		var uboSize = TexturedTriangleShader.PARAMS_SIZE;
+		var uboBytes = Bytes.alloc(uboSize);
+		uboBytes.blit(TexturedTriangleShader.PARAMS_matrix, projection.buffer, projection.byteOffset, 64);
+		uboBytes.setFloat(TexturedTriangleShader.PARAMS_premultiplied, trianglesPremultiplied ? 1.0 : 0.0);
+		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
+		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
+
+		var bindings = new GpuBindings();
+		bindings.buffer(ubo);
+		bindings.texture(texture.view);
+		bindings.sampler(repeat ? linearRepeatSampler : (smoothing ? linearClampSampler : nearestClampSampler));
+		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
+		bindings.destroy();
+
+		var enc = wgpu.currentEncoder;
+		enc.renderSetPipeline(pipeline);
+		enc.renderSetBindGroup(0, bindGroup);
+		enc.renderSetVertexBuffer(0, triangleBuffer);
+		enc.renderDrawRange(Std.int(length / 24), 1, Std.int(triangleUsed / 24), 0);
+		triangleUsed += length;
+
+		if (!wasPassActive) endRenderPass();
+		tempResources.push({buffers: [ubo], bindGroups: [bindGroup]});
+	}
+
+	/**
 	 * Draws `vertexCount` vertices of a `puffpuff.canvas.Mesh` layout buffer (32-byte stride:
 	 * `head` vec4 @0, `edges` vec4 @16) with `VectorPathShader`, reading paints from `paints` (storage).
 	 */
@@ -864,6 +950,8 @@ class WgpuContext3D {
 	}
 
 	public function dispose():Void {
+		if (triangleBuffer != null) retire(triangleBuffer);
+		triangleBuffer = null;
 		flushTempResources();
 		pipelineCache.clear();
 		if (graphicsShader.valid()) graphicsShader.destroy();
