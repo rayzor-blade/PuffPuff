@@ -3,7 +3,7 @@ package puffpuff.gpu.shaders;
 /**
  * Analytic-AA vector fill for `puffpuff.canvas.Canvas2D`. Vertex = `head (x, y, coverage, paint)` +
  * `edges (d0..d3)` in target pixels. Paint records (`puffpuff.canvas.Paint`, 8 × vec4) live in a
- * storage buffer indexed by `paint`. Gradients mix premultiplied, as CSS does.
+ * storage buffer indexed by `paint`; a gradient of more than four stops spans further records. Gradients mix premultiplied, as CSS does.
  */
 class VectorPathShader implements hlwgpu.hxsl.Shader {
 	static var SRC = {
@@ -38,6 +38,17 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 			return vec4(c.rgb * c.a, c.a);
 		}
 
+		function lane(v:Vec4, i:Int):Float {
+			var r = v.x;
+			if (i == 1)
+				r = v.y;
+			if (i == 2)
+				r = v.z;
+			if (i == 3)
+				r = v.w;
+			return r;
+		}
+
 		function fragment() {
 			var at = int(paint + 0.5) * 8;
 			var head = paints[at];
@@ -48,8 +59,17 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 				var origin = paints[at + 7];
 				var u = vec2(map.x * pixel.x + map.z * pixel.y + origin.x, map.y * pixel.x + map.w * pixel.y + origin.y);
 				var t = u.x;
-				if (head.x > 1.5)
+				if (head.x > 1.5) {
 					t = length(u);
+					if (head.w != 0.0) {
+						// Circles from the focal point (radius 0) out to the unit circle: the larger t on this pixel's circle.
+						var f = vec2(head.w, 0.0);
+						var d = u - f;
+						var k = 1.0 - head.w * head.w;
+						var b = dot(d, f);
+						t = (b + sqrt(b * b + k * dot(d, d))) / k;
+					}
+				}
 				if (origin.z > 1.5)
 					t = t - floor(t);
 				else if (origin.z > 0.5)
@@ -66,6 +86,28 @@ class VectorPathShader implements hlwgpu.hxsl.Shader {
 					mixed = mix(p1, p2, clamp((t - offsets.y) / max(offsets.z - offsets.y, 0.000001), 0.0, 1.0));
 				if (head.y > 3.5 && t > offsets.z)
 					mixed = mix(p2, p3, clamp((t - offsets.z) / max(offsets.w - offsets.z, 0.000001), 0.0, 1.0));
+				if (head.y > 4.5) {
+					// Stops 4 and up sit four to a record after this one: offsets, then four colors.
+					var count = int(head.y + 0.5);
+					var records = int((head.y + 3.0) * 0.25);
+					var before = offsets.w;
+					var beforeColor = p3;
+					for (j in 1...records) {
+						var base = at + j * 8;
+						var offs = paints[base];
+						for (k in 0...4) {
+							var s = j * 4 + k;
+							if (s < count) {
+								var o = lane(offs, k);
+								var c = premultiplied(paints[base + 1 + k]);
+								if (t > before)
+									mixed = mix(beforeColor, c, clamp((t - before) / max(o - before, 0.000001), 0.0, 1.0));
+								before = o;
+								beforeColor = c;
+							}
+						}
+					}
+				}
 				color = vec4(0.0, 0.0, 0.0, 0.0);
 				if (mixed.a > 0.000001)
 					color = vec4(mixed.rgb / mixed.a, mixed.a);

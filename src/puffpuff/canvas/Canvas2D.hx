@@ -41,6 +41,7 @@ class Canvas2D {
 	final mesh = new Mesh();
 	var paints:Bytes = Bytes.alloc(Paint.RECORD_BYTES * 64);
 	var paintCount = 0;
+	var recordCount = 0;
 	var builds = 0;
 
 	final shapes = new haxe.ds.IntMap<Array<Shape>>();
@@ -76,6 +77,7 @@ class Canvas2D {
 		builds++;
 		mesh.clear();
 		paintCount = 0;
+		recordCount = 0;
 		reused = 0;
 		if (trackHits)
 			hits.clear();
@@ -99,14 +101,19 @@ class Canvas2D {
 		var aa = 1 / pixelRatio;
 		var tolerance = TOLERANCE / pixelRatio;
 		var before = mesh.vertexCount();
-		mesh.paint = paintCount;
+		mesh.paint = recordCount;
 		tessellate(path, m, tolerance, aa, rule, stroke);
 		var after = mesh.vertexCount();
 		if (after == before)
 			return;
-		var at = paintCount * Paint.RECORD_BYTES;
-		if (at + Paint.RECORD_BYTES > paints.length) {
-			var next = Bytes.alloc(paints.length * 2);
+		var at = recordCount * Paint.RECORD_BYTES;
+		var records = paint.records();
+		var need = at + records * Paint.RECORD_BYTES;
+		if (need > paints.length) {
+			var size = paints.length * 2;
+			while (size < need)
+				size *= 2;
+			var next = Bytes.alloc(size);
 			next.blit(0, paints, 0, at);
 			paints = next;
 		}
@@ -124,6 +131,7 @@ class Canvas2D {
 			hits.insert(paintCount, x0, y0, x1, y1);
 		}
 		paintCount++;
+		recordCount += records;
 	}
 
 	function shapeOf(path:Path):Null<Shape> {
@@ -209,7 +217,7 @@ class Canvas2D {
 			vertexBuffer = dev.createBuffer(new GpuBufferDescriptor(vertexCapacity, BufferUsage.VERTEX | BufferUsage.COPY_DST));
 			vertexUsed = 0;
 		}
-		var paintBytes = paintCount * Paint.RECORD_BYTES;
+		var paintBytes = recordCount * Paint.RECORD_BYTES;
 		if (paintBuffer == null || paintUsed + paintBytes > paintCapacity) {
 			if (paintBuffer != null)
 				ctx.retire(paintBuffer);

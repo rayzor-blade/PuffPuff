@@ -15,6 +15,8 @@ class OpenFLGradientScene {
 	static inline var W = 480;
 	static inline var H = 290;
 	static inline var BACKGROUND = 0x14181F;
+	static final NINE_COLORS = [0xFF0000, 0x0000FF, 0xFF0000, 0x0000FF, 0xFF0000, 0x0000FF, 0xFF0000, 0x0000FF, 0xFF0000];
+	static final NINE_RATIOS = [0, 32, 64, 96, 128, 159, 191, 223, 255];
 
 	static function box(w:Float, h:Float, rotation:Float, tx:Float, ty:Float):Matrix {
 		var m = new Matrix();
@@ -60,10 +62,21 @@ class OpenFLGradientScene {
 		g.lineTo(470, 150);
 		g.lineStyle();
 
+		// F: a radial gradient whose focus is near the right rim.
+		g.beginGradientFill(GradientType.RADIAL, [0xFFFFFF, 0x102060], [1, 1], [0, 255], box(120, 56, 0, 345, 82), SpreadMethod.PAD,
+			openfl.display.InterpolationMethod.RGB, 0.8);
+		g.drawRect(345, 82, 120, 56);
+		g.endFill();
+
 		// G: six stops, a rainbow.
 		g.beginGradientFill(GradientType.LINEAR, [0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF], [1, 1, 1, 1, 1, 1],
-			[0, 51, 102, 153, 204, 255], box(460, 60, 0, 10, 215));
-		g.drawRect(10, 215, 460, 60);
+			[0, 51, 102, 153, 204, 255], box(460, 28, 0, 10, 215));
+		g.drawRect(10, 215, 460, 28);
+		g.endFill();
+
+		// H: nine stops, alternating, which take three paint records.
+		g.beginGradientFill(GradientType.LINEAR, NINE_COLORS, [1, 1, 1, 1, 1, 1, 1, 1, 1], NINE_RATIOS, box(460, 28, 0, 10, 247));
+		g.drawRect(10, 247, 460, 28);
 		g.endFill();
 
 		window.stage.addChild(shape);
@@ -104,8 +117,16 @@ class OpenFLGradientScene {
 		same("ellipse rings", 250 + 72, 140, 250, 140 + 45, 10);
 		expect("line start", 344, 150, 0xFF00FF, 24);
 		expect("line end", 466, 150, 0x00FFFF, 24);
-		expect("rainbow start", 14, 245, 0xFF0000, 24);
-		expect("rainbow end", 466, 245, 0xFF00FF, 24);
+		expect("rainbow start", 14, 229, 0xFF0000, 24);
+		expect("rainbow end", 466, 229, 0xFF00FF, 24);
+		expect("focal point", 453, 110, 0xFFFFFF, 20);
+		expect("far from the focus", 396, 110, 0x8089AB, 24);
+		expect("near the rim by the focus", 462, 110, 0x4C5888, 24);
+		var rainbow = [0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF];
+		for (i in 1...5)
+			expect('rainbow stop $i', 10 + 460 * i / 5, 229, rainbow[i], 24);
+		for (i in 1...8)
+			expect('nine stops $i', 10 + 460 * NINE_RATIOS[i] / 255, 261, NINE_COLORS[i], 28);
 
 		if (failures.length > 0) throw 'OpenFL gradient render wrong at ${scale}x: ${failures.join(", ")}';
 	}
