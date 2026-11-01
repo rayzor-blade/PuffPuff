@@ -43,6 +43,7 @@ class Canvas2D {
 	var paintCount = 0;
 	var recordCount = 0;
 	var builds = 0;
+	var cacheFrame = -1;
 
 	final shapes = new haxe.ds.IntMap<Array<Shape>>();
 	final emptied:Array<Int> = [];
@@ -73,8 +74,14 @@ class Canvas2D {
 		this.ctx = ctx;
 	}
 
+	/** Starts a build. Cached shapes the last frame did not draw are dropped when a new frame's first build starts, so builds in between share the cache. **/
 	public function begin():Void {
-		builds++;
+		var current = ctx == null ? 0 : ctx.frame;
+		if (current != cacheFrame) {
+			forgetUnused();
+			cacheFrame = current;
+			builds++;
+		}
 		mesh.clear();
 		paintCount = 0;
 		recordCount = 0;
@@ -201,7 +208,6 @@ class Canvas2D {
 
 	/** Uploads this build and draws it into the current target with `projection` (canvas pixels → clip). **/
 	public function flush(projection:Matrix4):Void {
-		forgetUnused();
 		var count = mesh.vertexCount();
 		if (count == 0)
 			return;

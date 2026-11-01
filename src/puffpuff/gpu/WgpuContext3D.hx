@@ -55,6 +55,45 @@ import puffpuff.gpu.shaders.OffsetQuadShader;
 import puffpuff.gpu.shaders.TexturedTriangleShader;
 import puffpuff.gpu.shaders.VectorPathShader;
 
+/** The state `drawQuadsInstanced` last built a pipeline for. **/
+private class QuadPipelineMemo {
+	public var pipeline:Null<GpuPipeline>;
+	public var shader:GpuShader;
+	public var format:TextureFormat;
+	public var blend = false;
+	public var srcRgb:BlendFactor;
+	public var dstRgb:BlendFactor;
+	public var opRgb:BlendOperation;
+	public var srcAlpha:BlendFactor;
+	public var dstAlpha:BlendFactor;
+	public var opAlpha:BlendOperation;
+	public var writeMask = 0;
+	public var depthWrite = false;
+	public var depthCompare:CompareFunction;
+	public var depthFormat:Null<TextureFormat>;
+
+	public function new() {}
+}
+
+/**
+ * What one `drawQuadsInstanced` call in a frame binds: its uniform block, instance storage and the bind group over them.
+ * The n-th call of every frame uses the n-th slot, so the buffers are written again rather than made again, and the bind
+ * group is kept while the pipeline, texture and sampler are the same as last frame's.
+ */
+private class QuadSlot {
+	public var ubo:Null<GpuBuffer>;
+	public var uboBytes:Bytes;
+	public var storage:Null<GpuBuffer>;
+	public var storageCapacity = 0;
+	public var bindGroup:Null<GpuBindGroup>;
+	public var pipeline:Null<GpuPipeline>;
+	public var texture:Null<WgpuTexture>;
+	public var textureVersion = -1;
+	public var smooth = false;
+
+	public function new() {}
+}
+
 /**
  * A `GpuBuffer` that can be uploaded to after a draw in the same frame, as GL allows.
  *
@@ -227,6 +266,9 @@ class WgpuTexture {
 	public var view(default, null):GpuTextureView;
 	public var mipLevels(default, null):Int;
 
+	/** Changes whenever `view` is replaced, so a bind group made from the old one is known stale. **/
+	public var version(default, null):Int = 0;
+
 	/** Only the top level, which is what a render pass draws into. **/
 	public var baseView(get, never):GpuTextureView;
 
@@ -249,6 +291,7 @@ class WgpuTexture {
 		this.gpuTexture = context.wgpu.device.texture(descriptor);
 		this.view = this.gpuTexture.createView(new GpuTextureViewDescriptor());
 		this.base = null;
+		version++;
 	}
 
 	/** The number of levels in a full chain down to 1x1. **/
@@ -436,6 +479,9 @@ class WgpuContext3D {
 	private var vertexBuffers:Map<Int, {buffer:WgpuVertexBuffer3D, offset:Int, format:VertexFormat}>;
 	private var passActive:Bool = false;
 	private var tempResources:Array<{buffers:Array<GpuBuffer>, bindGroups:Array<GpuBindGroup>}>;
+	private var quadPipeline = new QuadPipelineMemo();
+	private var quadSlots:Array<QuadSlot> = [];
+	private var quadSlotNext = 0;
 
 	/** Null = the frame view. Switch only between passes. **/
 	private var renderTarget:Null<WgpuTexture> = null;
@@ -907,52 +953,98 @@ class WgpuContext3D {
 			beginRenderPass(null);
 		}
 
-		var pipeline = pipelineCache.getOrCreate({
-			shader: custom != null ? shader(custom.key, custom.wgsl) : (offsets ? shader("offsetQuad", OffsetQuadShader.WGSL) : instancedQuadShader),
-			vsEntry: "vertex",
-			fsEntry: "fragment",
-			targetFormat: targetFormat(),
-			blendEnabled: blendEnabled,
-			srcRgb: srcRgb,
-			dstRgb: dstRgb,
-			opRgb: opRgb,
-			srcAlpha: srcAlpha,
-			dstAlpha: dstAlpha,
-			opAlpha: opAlpha,
-			colorWriteMask: colorWriteMask,
-			depthWrite: depthWrite,
-			depthCompare: depthCompare,
-			depthFormat: depthEnabled ? DEPTH_FORMAT : null,
-			topology: PrimitiveTopology.TriangleList,
-			cullMode: CullMode.None,
-			frontFace: FrontFace.Ccw,
-			vertexBuffers: []
-		});
+		var quadShader = custom != null ? shader(custom.key, custom.wgsl) : (offsets ? shader("offsetQuad", OffsetQuadShader.WGSL) : instancedQuadShader);
+		var format = targetFormat();
+		var depthFormat = depthEnabled ? DEPTH_FORMAT : null;
+		// The state rarely changes between flushes, so the last pipeline is reused without building a cache key.
+		var memo = quadPipeline;
+		if (memo.pipeline == null || memo.shader != quadShader || memo.format != format || memo.blend != blendEnabled || memo.srcRgb != srcRgb
+			|| memo.dstRgb != dstRgb || memo.opRgb != opRgb || memo.srcAlpha != srcAlpha || memo.dstAlpha != dstAlpha || memo.opAlpha != opAlpha
+			|| memo.writeMask != colorWriteMask || memo.depthWrite != depthWrite || memo.depthCompare != depthCompare || memo.depthFormat != depthFormat) {
+			memo.pipeline = pipelineCache.getOrCreate({
+				shader: quadShader,
+				vsEntry: "vertex",
+				fsEntry: "fragment",
+				targetFormat: format,
+				blendEnabled: blendEnabled,
+				srcRgb: srcRgb,
+				dstRgb: dstRgb,
+				opRgb: opRgb,
+				srcAlpha: srcAlpha,
+				dstAlpha: dstAlpha,
+				opAlpha: opAlpha,
+				colorWriteMask: colorWriteMask,
+				depthWrite: depthWrite,
+				depthCompare: depthCompare,
+				depthFormat: depthFormat,
+				topology: PrimitiveTopology.TriangleList,
+				cullMode: CullMode.None,
+				frontFace: FrontFace.Ccw,
+				vertexBuffers: []
+			});
+			memo.shader = quadShader;
+			memo.format = format;
+			memo.blend = blendEnabled;
+			memo.srcRgb = srcRgb;
+			memo.dstRgb = dstRgb;
+			memo.opRgb = opRgb;
+			memo.srcAlpha = srcAlpha;
+			memo.dstAlpha = dstAlpha;
+			memo.opAlpha = opAlpha;
+			memo.writeMask = colorWriteMask;
+			memo.depthWrite = depthWrite;
+			memo.depthCompare = depthCompare;
+			memo.depthFormat = depthFormat;
+		}
+		var pipeline = memo.pipeline;
 
 		var dev = wgpu.device;
 		var uboSize = custom != null ? custom.paramsSize : (offsets ? OffsetQuadShader.PARAMS_SIZE : InstancedQuadShader.PARAMS_SIZE);
-		var uboBytes = Bytes.alloc(uboSize);
+		if (quadSlotNext == quadSlots.length) quadSlots.push(new QuadSlot());
+		var slot = quadSlots[quadSlotNext++];
+		var stale = false;
+		if (slot.ubo == null || slot.uboBytes.length != uboSize) {
+			if (slot.ubo != null) retire(slot.ubo);
+			slot.ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
+			slot.uboBytes = Bytes.alloc(uboSize);
+			stale = true;
+		}
+		var uboBytes = slot.uboBytes;
 		if (custom != null && params != null) uboBytes.blit(0, params, 0, uboSize);
 		var projectionAt = custom != null ? custom.projectionAt : 0;
 		var premultipliedAt = custom != null ? custom.premultipliedAt : (offsets ? OffsetQuadShader.PARAMS_premultiplied : InstancedQuadShader.PARAMS_premultiplied);
 		if (projectionAt >= 0) uboBytes.blit(projectionAt, projection.buffer, projection.byteOffset, 64);
 		if (premultipliedAt >= 0) uboBytes.setFloat(premultipliedAt, quadsPremultiplied ? 1.0 : 0.0);
-		var ubo = dev.createBuffer(new GpuBufferDescriptor(uboSize, BufferUsage.UNIFORM | BufferUsage.COPY_DST));
-		wgpu.queue.writeBuffer(ubo, 0, uboBytes, uboSize);
+		wgpu.queue.writeBuffer(slot.ubo, 0, uboBytes, uboSize);
 
 		var storageByteLen = quadCount * (offsets ? 80 : 48); // 3 or 5 Vec4 (16 bytes) per quad
-		var storageBuf = dev.createBuffer(new GpuBufferDescriptor(storageByteLen, BufferUsage.STORAGE | BufferUsage.COPY_DST));
+		if (storageByteLen > slot.storageCapacity) {
+			if (slot.storage != null) retire(slot.storage);
+			var capacity = 4096;
+			while (capacity < storageByteLen) capacity <<= 1;
+			slot.storage = dev.createBuffer(new GpuBufferDescriptor(capacity, BufferUsage.STORAGE | BufferUsage.COPY_DST));
+			slot.storageCapacity = capacity;
+			stale = true;
+		}
 		var rawInstBytes = instanceData.byteOffset == 0 ? instanceData.buffer : instanceData.buffer.sub(instanceData.byteOffset, storageByteLen);
-		wgpu.queue.writeBuffer(storageBuf, 0, rawInstBytes, storageByteLen);
+		wgpu.queue.writeBuffer(slot.storage, 0, rawInstBytes, storageByteLen);
 
-		var bindings = new GpuBindings();
-		bindings.buffer(ubo);
-		bindings.texture(texture.view);
-		bindings.sampler(smoothing ? linearClampSampler : nearestClampSampler);
-		bindings.buffer(storageBuf);
-
-		var bindGroup = dev.bindGroup(pipeline, 0, bindings);
-		bindings.destroy();
+		if (stale || slot.bindGroup == null || slot.pipeline != pipeline || slot.texture != texture || slot.textureVersion != texture.version
+			|| slot.smooth != smoothing) {
+			if (slot.bindGroup != null) tempResources.push({buffers: [], bindGroups: [slot.bindGroup]});
+			var bindings = new GpuBindings();
+			bindings.buffer(slot.ubo);
+			bindings.texture(texture.view);
+			bindings.sampler(smoothing ? linearClampSampler : nearestClampSampler);
+			bindings.buffer(slot.storage);
+			slot.bindGroup = dev.bindGroup(pipeline, 0, bindings);
+			bindings.destroy();
+			slot.pipeline = pipeline;
+			slot.texture = texture;
+			slot.textureVersion = texture.version;
+			slot.smooth = smoothing;
+		}
+		var bindGroup = slot.bindGroup;
 
 		var enc = wgpu.currentEncoder;
 		enc.renderSetPipeline(pipeline);
@@ -962,8 +1054,6 @@ class WgpuContext3D {
 		if (!wasPassActive) {
 			endRenderPass();
 		}
-
-		tempResources.push({buffers: [ubo, storageBuf], bindGroups: [bindGroup]});
 	}
 
 	/**
@@ -1180,6 +1270,7 @@ class WgpuContext3D {
 			}
 		}
 		tempResources.resize(0);
+		quadSlotNext = 0;
 		for (texture in retiredTextures) texture.dispose();
 		retiredTextures.resize(0);
 	}
@@ -1187,8 +1278,15 @@ class WgpuContext3D {
 	public function dispose():Void {
 		if (triangleBuffer != null) retire(triangleBuffer);
 		triangleBuffer = null;
+		for (slot in quadSlots) {
+			if (slot.bindGroup != null) tempResources.push({buffers: [], bindGroups: [slot.bindGroup]});
+			if (slot.ubo != null) retire(slot.ubo);
+			if (slot.storage != null) retire(slot.storage);
+		}
+		quadSlots = [];
 		flushTempResources();
 		pipelineCache.clear();
+		quadPipeline = new QuadPipelineMemo();
 		if (graphicsShader.valid()) graphicsShader.destroy();
 		if (displayObjectShader.valid()) displayObjectShader.destroy();
 		if (bitmapFillShader.valid()) bitmapFillShader.destroy();

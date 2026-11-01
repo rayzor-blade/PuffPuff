@@ -555,6 +555,51 @@ class Cases {
 		};
 	}
 
+	static var interleavedReused = 0;
+
+	/** Eight groups of eight shapes, each followed by a quad flush, as a display list alternating shapes and bitmaps draws. **/
+	static function interleavedDraw():puffpuff.gpu.WgpuContext3D->Void {
+		var paths = shapePaths(64);
+		var groups = [for (g in 0...8) paths.slice(g * 8, g * 8 + 8)];
+		var canvas:Canvas2D = null;
+		var batcher:QuadBatcher = null;
+		var texture:puffpuff.gpu.WgpuContext3D.WgpuTexture = null;
+		var proj = new Matrix4();
+		proj.createOrtho(0, W, H, 0, -1, 1);
+		return c3 -> {
+			if (canvas == null) {
+				canvas = new Canvas2D(c3);
+				batcher = new QuadBatcher(c3, 64);
+				texture = c3.createTexture(4, 4);
+				var px = haxe.io.Bytes.alloc(64);
+				for (i in 0...64) px.set(i, 200);
+				texture.uploadFromBytes(px);
+			}
+			interleavedReused = 0;
+			for (group in groups) {
+				drawShapes(canvas, group, 0);
+				interleavedReused += canvas.reused;
+				canvas.flush(proj);
+				batcher.begin(texture);
+				for (i in 0...16) batcher.addQuad(8, 0, 0, 8, i * 10.0, 400);
+				batcher.flush(proj);
+			}
+		};
+	}
+
+	static function interleavedFrame():BenchCase {
+		var c = gpuFrame("gpu.frame.interleaved.submit", false, interleavedDraw);
+		var inner = c.check;
+		var frame = c.run;
+		// Shapes are cached from their second frame, so the check needs three before it counts.
+		c.check = () -> {
+			for (i in 0...3) frame();
+			var problem = inner == null ? null : inner();
+			return problem != null ? problem : interleavedReused == 64 ? null : 'reused $interleavedReused of 64 cached shapes in a frame of partial builds';
+		};
+		return c;
+	}
+
 	static function spriteDraw():puffpuff.gpu.WgpuContext3D->Void {
 		var batcher:QuadBatcher = null;
 		var texture:puffpuff.gpu.WgpuContext3D.WgpuTexture = null;
@@ -576,6 +621,36 @@ class Cases {
 			batcher.begin(texture);
 			for (i in 0...5000) batcher.addQuad(8, 0, 0, 8, (i % 64) * 8.0, Std.int(i / 64) * 6.0);
 			batcher.flush(proj);
+		};
+	}
+
+	/** Many small batches, as a display list with alternating textures flushes: 64 flushes of 32 quads over two textures. **/
+	static function spriteBatchesDraw():puffpuff.gpu.WgpuContext3D->Void {
+		var batcher:QuadBatcher = null;
+		var textures:Array<puffpuff.gpu.WgpuContext3D.WgpuTexture> = [];
+		var proj = new Matrix4();
+		proj.createOrtho(0, W, H, 0, -1, 1);
+		return c3 -> {
+			if (batcher == null) {
+				batcher = new QuadBatcher(c3, 64);
+				for (t in 0...2) {
+					var texture = c3.createTexture(4, 4);
+					var px = haxe.io.Bytes.alloc(64);
+					for (i in 0...16) {
+						px.set(i * 4, t == 0 ? 255 : 60);
+						px.set(i * 4 + 1, 200);
+						px.set(i * 4 + 2, t == 0 ? 60 : 255);
+						px.set(i * 4 + 3, 255);
+					}
+					texture.uploadFromBytes(px);
+					textures.push(texture);
+				}
+			}
+			for (b in 0...64) {
+				batcher.begin(textures[b & 1]);
+				for (i in 0...32) batcher.addQuad(8, 0, 0, 8, (i % 32) * 10.0, b * 6.0);
+				batcher.flush(proj);
+			}
 		};
 	}
 
@@ -716,6 +791,9 @@ class Cases {
 			gpuFrame("gpu.frame.vectors.readback", true, vectorDraw, vectorsDrawn),
 			gpuFrame("gpu.frame.sprites.submit", false, spriteDraw),
 			gpuFrame("gpu.frame.sprites.readback", true, spriteDraw),
+			gpuFrame("gpu.frame.sprites.batches.submit", false, spriteBatchesDraw),
+			gpuFrame("gpu.frame.sprites.batches.readback", true, spriteBatchesDraw),
+			interleavedFrame(),
 			gpuFrame("gpu.frame.triangles.submit", false, triangleDraw),
 			gpuFrame("gpu.frame.triangles.readback", true, triangleDraw),
 			gpuFrame("gpu.frame.text.static.submit", false, labelsDraw(Cached)),
