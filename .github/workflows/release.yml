@@ -161,31 +161,39 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libpng16-16t64 libturbojpeg libvorbisfile3 libogg0 zlib1g
-      - name: Download HashLink
+      - name: Get HashLink
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            # The macOS nightly has the libraries but no hl executable.
+            brew install hashlink
+            echo "HL=$(brew --prefix)/bin/hl" >> "$GITHUB_ENV"
+            echo "HL_LIBS=$(brew --prefix)/lib" >> "$GITHUB_ENV"
+            exit 0
+          fi
           gh release download latest --repo HaxeFoundation/hashlink --pattern "hashlink-*-${{ matrix.hashlink }}.*" --dir hashlink-download
           cd hashlink-download
           shopt -s nullglob
           for f in *.tar.gz; do tar xzf "$f"; done
           for f in *.zip; do unzip -q "$f"; done
-          ls
           hl=$(find . -type f \( -name hl -o -name hl.exe \) | head -1)
-          echo "HL_DIR=$(cd "$(dirname "$hl")" && pwd)" >> "$GITHUB_ENV"
-      - name: Compile with every native bound
+          echo "HL=$(cd "$(dirname "$hl")" && pwd)/$(basename "$hl")" >> "$GITHUB_ENV"
+          echo "HL_LIBS=$(cd "$(dirname "$hl")" && pwd)" >> "$GITHUB_ENV"
+      - name: Compile with the blinc_abi natives bound
         run: haxe tests/natives/build.hxml
       - name: Load it on HashLink
         shell: bash
         run: |
+          "$HL" --version
           cd tests/natives/bin
           case "$RUNNER_OS" in
-            Linux) export LD_LIBRARY_PATH="$PWD:$HL_DIR" ;;
-            macOS) export DYLD_LIBRARY_PATH="$PWD:$HL_DIR" ;;
-            Windows) export PATH="$PWD:$HL_DIR:$PATH" ;;
+            Linux) export LD_LIBRARY_PATH="$PWD:$HL_LIBS" ;;
+            macOS) export DYLD_LIBRARY_PATH="$PWD:$HL_LIBS" ;;
+            Windows) export PATH="$PWD:$HL_LIBS:$PATH" ;;
           esac
-          "$HL_DIR/hl" natives.hl | tee out.txt
+          "$HL" natives.hl | tee out.txt
           grep -q "all natives bound" out.txt
 
   publish:

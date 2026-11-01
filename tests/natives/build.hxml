@@ -3,6 +3,4 @@
 -main Main
 -D ash_future_stock
 -dce no
---macro include("puffpuff")
---macro include("lime")
 -hl tests/natives/bin/natives.hl
