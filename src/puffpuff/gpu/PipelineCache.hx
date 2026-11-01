@@ -11,6 +11,7 @@ import gpu.GpuPipeline;
 import gpu.GpuPipelineBuilder;
 import gpu.GpuShader;
 import gpu.PrimitiveTopology;
+import gpu.StencilOperation;
 import gpu.TextureFormat;
 import gpu.VertexFormat;
 import gpu.VertexStepMode;
@@ -25,6 +26,16 @@ typedef VertexBufferLayoutDesc = {
 	var stride:Int;
 	var stepMode:VertexStepMode;
 	var attributes:Array<VertexAttributeDesc>;
+}
+
+/** Stencil test of a pipeline's depth attachment, the same for front and back faces. **/
+typedef StencilKey = {
+	var compare:CompareFunction;
+	var fail:StencilOperation;
+	var depthFail:StencilOperation;
+	var pass:StencilOperation;
+	var readMask:Int;
+	var writeMask:Int;
 }
 
 typedef PipelineStateKey = {
@@ -47,6 +58,7 @@ typedef PipelineStateKey = {
 	var cullMode:CullMode;
 	var frontFace:FrontFace;
 	var vertexBuffers:Array<VertexBufferLayoutDesc>;
+	@:optional var stencil:Null<StencilKey>;
 }
 
 /**
@@ -100,6 +112,8 @@ class PipelineCache {
 
 		if (state.depthFormat != null) {
 			builder.depth(state.depthFormat, state.depthWrite, state.depthCompare);
+			var stencil = state.stencil;
+			if (stencil != null) builder.stencil(stencil.compare, stencil.fail, stencil.depthFail, stencil.pass, stencil.readMask, stencil.writeMask);
 		}
 
 		builder.primitive(state.topology, state.cullMode, state.frontFace);
@@ -126,6 +140,9 @@ class PipelineCache {
 		}
 		buf.add(':${s.colorWriteMask}:${s.depthWrite ? 1 : 0}:${(s.depthCompare:Int)}:${s.depthFormat != null ? (s.depthFormat:Int) : -1}');
 		buf.add(':${(s.topology:Int)}:${(s.cullMode:Int)}:${(s.frontFace:Int)}');
+		var stencil = s.stencil;
+		if (stencil != null && s.depthFormat != null)
+			buf.add(':st${(stencil.compare:Int)},${(stencil.fail:Int)},${(stencil.depthFail:Int)},${(stencil.pass:Int)},${stencil.readMask},${stencil.writeMask}');
 		if (s.vertexBuffers != null) {
 			for (vb in s.vertexBuffers) {
 				buf.add('|vb:${vb.stride},${(vb.stepMode:Int)}');

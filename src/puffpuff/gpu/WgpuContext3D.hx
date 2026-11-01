@@ -7,6 +7,7 @@ import gpu.BufferUsage;
 import gpu.ColorWrite;
 import gpu.CompareFunction;
 import gpu.CullMode;
+import gpu.StencilOperation;
 import gpu.FilterMode;
 import gpu.FrontFace;
 import gpu.GpuBindGroup;
@@ -419,7 +420,7 @@ class WgpuContext3D {
 	// Tracked Context3D state
 	public var blendEnabled:Bool = true;
 
-	static inline var DEPTH_FORMAT = TextureFormat.Depth24plus;
+	static inline var DEPTH_FORMAT = TextureFormat.Depth24plusStencil8;
 
 	/** While enabled, draws are clipped to the scissor rectangle (target pixels from the top left). **/
 	public var scissorEnabled(default, null) = false;
@@ -451,6 +452,15 @@ class WgpuContext3D {
 	public var colorWriteMask:Int = ColorWrite.ALL;
 	public var depthWrite:Bool = false;
 	public var depthCompare:CompareFunction = CompareFunction.Always;
+
+	/** Stencil test of `drawProgram` while depth is enabled, as Context3D sets it. The default passes everything and keeps the buffer. **/
+	public var stencilCompare:CompareFunction = CompareFunction.Always;
+	public var stencilFail:StencilOperation = StencilOperation.Keep;
+	public var stencilDepthFail:StencilOperation = StencilOperation.Keep;
+	public var stencilPass:StencilOperation = StencilOperation.Keep;
+	public var stencilReadMask:Int = 0xFF;
+	public var stencilWriteMask:Int = 0xFF;
+	public var stencilReference:Int = 0;
 	public var cullMode:CullMode = CullMode.None;
 	public var frontFace:FrontFace = FrontFace.Ccw;
 	public var smoothing:Bool = true;
@@ -635,9 +645,10 @@ class WgpuContext3D {
 
 	/**
 	 * Starts a pass on the target. Clears color to the given value if `clearR` is set, else keeps it. With depth enabled,
-	 * clears depth to `clearDepth` if that is set, else keeps it.
+	 * clears depth to `clearDepth` and stencil to `clearStencil` if those are set, else keeps them.
 	 */
-	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0, clearDepth:Null<Float> = null):Void {
+	public function beginRenderPass(clearR:Null<Float> = null, clearG:Float = 0.0, clearB:Float = 0.0, clearA:Float = 1.0, clearDepth:Null<Float> = null,
+			clearStencil:Null<Int> = null):Void {
 		if (passActive) return;
 		var enc = wgpu.currentEncoder;
 		var view = renderTarget != null ? renderTarget.baseView : wgpu.currentView;
@@ -660,6 +671,9 @@ class WgpuContext3D {
 				depth.depthLoadOp(clearDepth != null ? LoadOp.Clear : LoadOp.Load);
 				depth.depthStoreOp(StoreOp.Store);
 				depth.depthClearValue(clearDepth != null ? clearDepth : 1.0);
+				depth.stencilLoadOp(clearStencil != null ? LoadOp.Clear : LoadOp.Load);
+				depth.stencilStoreOp(StoreOp.Store);
+				depth.stencilClearValue(clearStencil != null ? clearStencil : 0);
 				desc.depthStencilAttachment(depth);
 			}
 			enc.beginRenderPass(desc);
@@ -880,8 +894,17 @@ class WgpuContext3D {
 			topology: PrimitiveTopology.TriangleList,
 			cullMode: cullMode,
 			frontFace: frontFace,
-			vertexBuffers: vbDescs
+			vertexBuffers: vbDescs,
+			stencil: depthEnabled ? {
+				compare: stencilCompare,
+				fail: stencilFail,
+				depthFail: stencilDepthFail,
+				pass: stencilPass,
+				readMask: stencilReadMask,
+				writeMask: stencilWriteMask
+			} : null
 		});
+		if (depthEnabled) wgpu.currentEncoder.renderSetStencilReference(stencilReference);
 
 		var dev = wgpu.device;
 		var bindings = new GpuBindings();
