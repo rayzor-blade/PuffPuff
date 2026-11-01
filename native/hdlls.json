@@ -1,33 +1,38 @@
 {
   "source": {
-    "repository": "rayzor-blade/ashui",
-    "tag": ""
+    "repository": "project-blinc/blinc_abi",
+    "rev": "3672ec909242f2c98a60dfc66988cfe12da76b1f"
   },
   "platforms": {
     "linux-x86_64": {
-      "releaseAsset": "blinc_abi-linux-x86_64.hdll",
-      "packagePath": "native/linux-x86_64/blinc_abi.hdll",
-      "sha256": ""
+      "runner": "ubuntu-24.04",
+      "target": "x86_64-unknown-linux-gnu",
+      "library": "libblinc_abi.so",
+      "packagePath": "native/linux-x86_64/blinc_abi.hdll"
     },
     "linux-aarch64": {
-      "releaseAsset": "blinc_abi-linux-aarch64.hdll",
-      "packagePath": "native/linux-aarch64/blinc_abi.hdll",
-      "sha256": ""
+      "runner": "ubuntu-24.04-arm",
+      "target": "aarch64-unknown-linux-gnu",
+      "library": "libblinc_abi.so",
+      "packagePath": "native/linux-aarch64/blinc_abi.hdll"
     },
     "macos-aarch64": {
-      "releaseAsset": "blinc_abi-macos-aarch64.hdll",
-      "packagePath": "native/macos-aarch64/blinc_abi.hdll",
-      "sha256": ""
+      "runner": "macos-latest",
+      "target": "aarch64-apple-darwin",
+      "library": "libblinc_abi.dylib",
+      "packagePath": "native/macos-aarch64/blinc_abi.hdll"
     },
     "macos-x86_64": {
-      "releaseAsset": "blinc_abi-macos-x86_64.hdll",
-      "packagePath": "native/macos-x86_64/blinc_abi.hdll",
-      "sha256": ""
+      "runner": "macos-latest",
+      "target": "x86_64-apple-darwin",
+      "library": "libblinc_abi.dylib",
+      "packagePath": "native/macos-x86_64/blinc_abi.hdll"
     },
     "windows-x86_64": {
-      "releaseAsset": "blinc_abi-windows-x86_64.hdll",
-      "packagePath": "native/windows-x86_64/blinc_abi.hdll",
-      "sha256": ""
+      "runner": "windows-2022",
+      "target": "x86_64-pc-windows-msvc",
+      "library": "blinc_abi.dll",
+      "packagePath": "native/windows-x86_64/blinc_abi.hdll"
     }
   }
 }

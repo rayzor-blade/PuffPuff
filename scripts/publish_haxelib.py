@@ -2,7 +2,6 @@
 """Validate and optionally submit the release ZIP."""
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,14 +33,12 @@ def validate(path, account, tag):
         if left:
             raise ValueError("README links and embeds must be absolute for Haxelib: " + ", ".join(left))
         manifest = json.loads(archive.read("native/hdlls.json"))
-        if not manifest["source"]["tag"]:
-            raise ValueError("native libraries are not pinned to a release")
+        if not manifest["source"]["rev"]:
+            raise ValueError("native libraries are not pinned to a blinc_abi revision")
         for platform, entry in manifest["platforms"].items():
             data = archive.read(entry["packagePath"]) if entry["packagePath"] in archive.namelist() else b""
             if not data:
                 raise ValueError(f"{platform}: native library is missing or empty")
-            if hashlib.sha256(data).hexdigest() != entry["sha256"]:
-                raise ValueError(f"{platform}: native library does not match its checksum")
     return metadata
 
 

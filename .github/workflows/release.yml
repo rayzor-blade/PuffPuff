@@ -19,8 +19,78 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native:
+    name: blinc_abi ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest,     platform: macos-aarch64,  target: aarch64-apple-darwin,      library: libblinc_abi.dylib }
+          - { os: macos-latest,     platform: macos-x86_64,   target: x86_64-apple-darwin,       library: libblinc_abi.dylib }
+          - { os: ubuntu-24.04,     platform: linux-x86_64,   target: x86_64-unknown-linux-gnu,  library: libblinc_abi.so }
+          - { os: ubuntu-24.04-arm, platform: linux-aarch64,  target: aarch64-unknown-linux-gnu, library: libblinc_abi.so }
+          - { os: windows-2022,     platform: windows-x86_64, target: x86_64-pc-windows-msvc,    library: blinc_abi.dll }
+    steps:
+      - uses: actions/checkout@v7
+      - id: source
+        shell: bash
+        run: |
+          # The revision native/hdlls.json pins; the matrix above must agree with its platforms.
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          m = json.load(open("native/hdlls.json"))
+          e = m["platforms"]["${{ matrix.platform }}"]
+          assert (e["runner"], e["target"], e["library"]) == ("${{ matrix.os }}", "${{ matrix.target }}", "${{ matrix.library }}"), "matrix differs from native/hdlls.json"
+          print("repository=" + m["source"]["repository"])
+          print("rev=" + m["source"]["rev"])
+          PY
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.source.outputs.repository }}
+          ref: ${{ steps.source.outputs.rev }}
+          path: blinc_abi
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: blinc_abi
+          shared-key: blinc_abi-${{ matrix.platform }}
+
+      - name: Build the Windows runtime import library
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/HaxeFoundation/hashlink.git /tmp/hashlink
+          cmake -S /tmp/hashlink -B /tmp/hashlink/build -DWITH_VM=ON \
+            -DWITH_FMT=OFF -DWITH_HEAPS=OFF -DWITH_OPENAL=OFF -DWITH_SDL=OFF \
+            -DWITH_SQLITE=OFF -DWITH_SSL=OFF -DWITH_UI=OFF -DWITH_UV=OFF \
+            -DWITH_VIDEO=OFF
+          cmake --build /tmp/hashlink/build --config Release --target libhl
+          libdir=$(dirname "$(find /tmp/hashlink/build -name 'libhl.lib' | head -1)")
+          test -f "$libdir/libhl.lib"
+          echo "HL_LIB_DIR=$(cygpath -w "$libdir")" >> "$GITHUB_ENV"
+
+      - name: Build the native library
+        shell: bash
+        working-directory: blinc_abi
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Collect the library
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "blinc_abi/target/${{ matrix.target }}/release/${{ matrix.library }}" "out/blinc_abi-${{ matrix.platform }}.hdll"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hdll-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
+
   package:
     name: package and validate the Haxelib
+    needs: native
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -36,14 +106,11 @@ jobs:
               { echo "haxelib.json version differs from $TAG"; exit 1; }
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - name: Download the pinned blinc_abi libraries
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          source=$(python3 -c 'import json; s = json.load(open("native/hdlls.json"))["source"]; print(s["repository"], s["tag"])')
-          set -- $source
-          [ -n "$2" ] || { echo "native/hdlls.json has no release tag: run scripts/pin_native.py"; exit 1; }
-          gh release download "$2" --repo "$1" --pattern 'blinc_abi-*.hdll' --dir native-assets
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: hdll-*
+          path: native-assets
+          merge-multiple: true
       - run: python3 scripts/package_haxelib.py release --assets native-assets ${TAG:+--version "$TAG"}
         env:
           TAG: ${{ steps.version.outputs.tag }}

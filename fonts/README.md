@@ -1,7 +1,7 @@
 # Default fonts
 
 Web builds bundle `Arimo.woff2` and `Arimo-Italic.woff2` because browsers do
-not expose system fonts to the runtime. See `ashui.text.Fonts`.
+not expose system fonts to the runtime.
 The files are Arimo variable fonts from
 [google/fonts](https://github.com/google/fonts/tree/main/ofl/arimo), covering
 weights 400–700. They were converted from TTF to WOFF2 without other changes.

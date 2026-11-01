@@ -2,7 +2,6 @@
 """Package puffpuff as a Haxelib archive."""
 
 import argparse
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -109,22 +108,16 @@ def version_of(tag: str) -> str:
     return version
 
 
-def sha256_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def native_libraries(assets: Path) -> dict[str, Path]:
-    """The pinned blinc_abi libraries in `assets`, checked against the checksums in native/hdlls.json."""
+    """The blinc_abi libraries built for native/hdlls.json, named `blinc_abi-<platform>.hdll` in `assets`."""
     manifest = json.loads((ROOT / "native/hdlls.json").read_text())
-    if not manifest["source"]["tag"]:
-        raise ValueError("native/hdlls.json has no release tag: run scripts/pin_native.py")
+    if not manifest["source"]["rev"]:
+        raise ValueError("native/hdlls.json has no blinc_abi revision")
     found = {}
     for platform, entry in manifest["platforms"].items():
-        path = assets / entry["releaseAsset"]
-        if not path.is_file():
+        path = assets / f"blinc_abi-{platform}.hdll"
+        if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"missing native library {path}")
-        if sha256_of(path) != entry["sha256"]:
-            raise ValueError(f"{entry['releaseAsset']} does not match its checksum in native/hdlls.json")
         found[entry["packagePath"]] = path
     return found
 
@@ -155,7 +148,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to write puffpuff.zip into")
     parser.add_argument("--version", help="release tag to stamp into the package")
-    parser.add_argument("--assets", type=Path, help="directory holding the native/hdlls.json release assets")
+    parser.add_argument("--assets", type=Path, help="directory holding the built native libraries")
     parser.add_argument("--without-native", action="store_true", help="skip the native libraries; the package cannot be published")
     args = parser.parse_args()
     if not args.assets and not args.without_native:

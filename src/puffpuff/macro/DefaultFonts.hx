@@ -49,7 +49,6 @@ class DefaultFonts {
 		if (bundled != null)
 			candidates.push(bundled);
 		candidates.push(Path.join([root, "..", "blinc_abi", "target", "release", "libblinc_abi.dylib"]));
-		candidates.push(Path.join([root, "..", "ashui", "tools", "snapshot", "bin", "blinc_abi.hdll"]));
 		var debug = Path.join([root, "..", "blinc_abi", "target", "debug", "libblinc_abi.dylib"]);
 		candidates.push(debug);
 
