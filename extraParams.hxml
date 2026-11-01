@@ -1,5 +1,5 @@
 -D puffpuff
--D lime=8.1.2
+-D lime=8.4.0
 -D tools
 --remap flash:openfl
 -D lime-cffi

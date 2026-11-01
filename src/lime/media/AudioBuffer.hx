@@ -22,6 +22,8 @@ class AudioBuffer {
 	@:noCompletion private var __srcCustom:Dynamic;
 	@:noCompletion private var __srcVorbisBytes:Dynamic;
 	@:noCompletion private var __srcVorbisFile:Dynamic;
+	/** Length in milliseconds of a sound that a decoder streams without loading it; 0 where `data` holds the samples. **/
+	@:noCompletion private var __srcSDLSoundDuration:Int = 0;
 	@:noCompletion private var __srcVorbisPath:String;
 
 	public function new() {
