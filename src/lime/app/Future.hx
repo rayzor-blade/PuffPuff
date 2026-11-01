@@ -24,14 +24,19 @@ class Future<T> {
 			if (isAsync) {
 				var af = new ash.Future<T>();
 				__ashFuture = af;
+				// Listeners run on the creating thread's event loop, as Lime's do on the main thread.
+				var events = sys.thread.Thread.current().events;
+				function deliver(f:Void->Void):Void {
+					if (events != null) events.run(f) else f();
+				}
 				sys.thread.Thread.create(() -> {
 					try {
 						var res = work();
 						af.resolve(res);
-						__complete(res);
+						deliver(() -> __complete(res));
 					} catch (e:Dynamic) {
 						af.reject(e);
-						__error(e);
+						deliver(() -> __error(e));
 					}
 				});
 			} else {

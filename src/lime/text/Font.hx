@@ -44,7 +44,7 @@ class Font {
 	}
 
 	public function new(name:String = null, pixelMode:Bool = false) {
-		this.name = name != null ? name : "Arimo";
+		this.name = name;
 		this.pixelMode = pixelMode;
 		this.unitsPerEM = 1000;
 		this.numGlyphs = 65535;

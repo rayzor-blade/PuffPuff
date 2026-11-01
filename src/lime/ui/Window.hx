@@ -124,6 +124,7 @@ class Window {
 	@:noCompletion private var __lastMouseX:Float = 0.0;
 	@:noCompletion private var __lastMouseY:Float = 0.0;
 	@:noCompletion private var __closed:Bool = false;
+	@:noCompletion private var __closing:Bool = false;
 
 	private static var __nextId:Int = 0;
 
@@ -194,11 +195,8 @@ class Window {
 				case None:
 					break;
 				case Closed:
-					onClose.dispatch();
-					if (!onClose.canceled) {
-						close();
-						return false;
-					}
+					close();
+					if (__closed) return false;
 				case Destroyed:
 					__closed = true;
 					return false;
@@ -435,8 +433,13 @@ class Window {
 		Sys.println('[Alert${title != null ? " - " + title : ""}] $message');
 	}
 
+	/** Dispatches `onClose`, which a listener may cancel, and then destroys the window. **/
 	public function close():Void {
-		if (__closed) return;
+		if (__closed || __closing) return;
+		__closing = true;
+		onClose.dispatch();
+		__closing = false;
+		if (onClose.canceled) return;
 		__closed = true;
 		if (__wgpuContext != null) {
 			__wgpuContext.destroy();

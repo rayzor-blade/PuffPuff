@@ -60,6 +60,10 @@ class ApplicationBackend {
 
 			lime.ui.Gamepad.__poll();
 
+			// Timers, and the completion of futures, run on this thread between frames.
+			var events = sys.thread.Thread.current().events;
+			if (events != null) events.progress();
+
 			var now = Timer.stamp();
 			var deltaMs = Std.int(Math.max(1, Math.round((now - lastTime) * 1000.0)));
 			lastTime = now;
