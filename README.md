@@ -10,7 +10,7 @@ PuffPuff is a high-performance, lightweight multimedia engine replacement for Li
 haxelib install puffpuff
 ```
 
-Add `-lib puffpuff` to your build and compile for HashLink. Run the bytecode with HashLink (1.15) or with [Ash](https://github.com/rayzor-blade/ash). For HashLink, also add `-D ash_future_stock` to the build, and make the folder with the `.hl` file visible to the library loader (on Linux, `LD_LIBRARY_PATH=. hl app.hl`). Haxelib installs the other libraries it needs (`hlwgpu`, `hlwindow`, `hlavi`, `ash-future`, `ash-simd`, `hashlink`). It also bundles `blinc_abi`, which does text shaping, and the build copies it next to the `.hl` file.
+Add `-lib puffpuff` to your build and compile for HashLink. Run the bytecode with HashLink (1.15) or with [Ash](https://github.com/rayzor-blade/ash). HashLink has no JIT virtual machine on ARM processors (Apple silicon, Linux aarch64), so use Ash there. For HashLink, also add `-D ash_future_stock` to the build, and make the folder with the `.hl` file visible to the library loader (on Linux, `LD_LIBRARY_PATH=. hl app.hl`). Haxelib installs the other libraries it needs (`hlwgpu`, `hlwindow`, `hlavi`, `ash-future`, `ash-simd`, `hashlink`). It also bundles `blinc_abi`, which does text shaping, and the build copies it next to the `.hl` file.
 
 PuffPuff is tested on macOS (Apple silicon) and Linux (x86_64, Intel graphics). The bundled `blinc_abi` also covers Linux aarch64, macOS x86_64 and Windows, which are untested.
 
