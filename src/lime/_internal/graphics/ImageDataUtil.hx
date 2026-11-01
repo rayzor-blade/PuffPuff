@@ -341,7 +341,44 @@ class ImageDataUtil
 
 				if (!useAlphaImage)
 				{
-					if (blend)
+					if (blend && sourceFormat == destFormat && sourceFormat != ARGB32 && !sourcePremultiplied && !destPremultiplied
+						&& sourceBytesPerPixel == 4 && destBytesPerPixel == 4)
+					{
+						// Same math as the general loop below, on raw bytes: alpha is the fourth byte of both.
+						var src:hl.Bytes = sourceData.buffer;
+						var dst:hl.Bytes = destData.buffer;
+						var sourceBase = sourceData.byteOffset;
+						var destBase = destData.byteOffset;
+						for (y in 0...destView.height)
+						{
+							sourcePosition = sourceBase + sourceView.row(y);
+							destPosition = destBase + destView.row(y);
+							for (x in 0...destView.width)
+							{
+								var sa = src.getUI8(sourcePosition + 3) / 255.0;
+								var da = dst.getUI8(destPosition + 3) / 255.0;
+								var inverse = 1 - sa;
+								var alpha = sa + (da * inverse);
+								if (alpha == 0)
+								{
+									dst.setI32(destPosition, 0);
+								}
+								else
+								{
+									for (c in 0...3)
+									{
+										var v = Std.int((src.getUI8(sourcePosition + c) * sa + dst.getUI8(destPosition + c) * da * inverse) / alpha + 0.5);
+										dst.setUI8(destPosition + c, v > 255 ? 255 : v);
+									}
+									var a = Std.int(alpha * 255.0 + 0.5);
+									dst.setUI8(destPosition + 3, a > 255 ? 255 : a);
+								}
+								sourcePosition += 4;
+								destPosition += 4;
+							}
+						}
+					}
+					else if (blend)
 					{
 						for (y in 0...destView.height)
 						{
@@ -861,6 +898,50 @@ class ImageDataUtil
 			var bgra:BGRA = 0;
 			var pixel:RGBA = 0;
 			var destPosition = 0;
+
+			if (image.buffer.bitsPerPixel == 32)
+			{
+				// Same result as the general loop below, with the channels picked out of raw bytes and written in the asked order.
+				var src:hl.Bytes = data.buffer;
+				var out:hl.Bytes = bytes;
+				var base = data.byteOffset;
+				var ri = sourceFormat == BGRA32 ? 2 : sourceFormat == ARGB32 ? 1 : 0;
+				var gi = sourceFormat == ARGB32 ? 2 : 1;
+				var bi = sourceFormat == BGRA32 ? 0 : sourceFormat == ARGB32 ? 3 : 2;
+				var ai = sourceFormat == ARGB32 ? 0 : 3;
+				var ro = format == ARGB32 ? 1 : format == BGRA32 ? 2 : 0;
+				var go = format == ARGB32 ? 2 : 1;
+				var bo = format == ARGB32 ? 3 : format == BGRA32 ? 0 : 2;
+				var ao = format == ARGB32 ? 0 : 3;
+				for (y in 0...dataView.height)
+				{
+					position = base + dataView.row(y);
+					for (x in 0...dataView.width)
+					{
+						var r = src.getUI8(position + ri);
+						var g = src.getUI8(position + gi);
+						var b = src.getUI8(position + bi);
+						var a = src.getUI8(position + ai);
+						if (premultiplied && a != 0 && a != 0xFF)
+						{
+							var unmult = 255.0 / a;
+							r = Std.int(r * unmult + 0.5);
+							g = Std.int(g * unmult + 0.5);
+							b = Std.int(b * unmult + 0.5);
+							if (r > 255) r = 255;
+							if (g > 255) g = 255;
+							if (b > 255) b = 255;
+						}
+						out.setUI8(destPosition + ro, r);
+						out.setUI8(destPosition + go, g);
+						out.setUI8(destPosition + bo, b);
+						out.setUI8(destPosition + ao, a);
+						destPosition += 4;
+						position += 4;
+					}
+				}
+				return bytes;
+			}
 
 			for (y in 0...dataView.height)
 			{
