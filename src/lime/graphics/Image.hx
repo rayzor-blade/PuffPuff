@@ -24,6 +24,8 @@ import lime.utils.ArrayBuffer;
 import lime.utils.BytePointer;
 import lime.utils.Log;
 import lime.utils.UInt8Array;
+import puffpuff.snapshot.Bmp;
+import puffpuff.snapshot.Jpeg;
 import puffpuff.snapshot.Png;
 #if hl
 import puffpuff.media.BitmapNative;
@@ -510,23 +512,29 @@ class Image
 	**/
 	public function encode(format:ImageFileFormat = null, quality:Int = 90):Bytes
 	{
+		if (buffer == null || buffer.data == null) return null;
+
+		// PNG and BMP keep the alpha channel; JPEG drops it, which leaves premultiplied colors on black.
+		var source:Image = this;
+		var wantPremultiplied = format == ImageFileFormat.JPEG;
+		if (buffer.format != RGBA32 || buffer.premultiplied != wantPremultiplied)
+		{
+			source = clone();
+			source.premultiplied = wantPremultiplied;
+			source.format = RGBA32;
+		}
+		var data = source.buffer.data.toBytes();
+		var stride = source.buffer.stride;
+
 		switch (format)
 		{
 			case null, ImageFileFormat.PNG:
-				if (buffer == null || buffer.data == null) return null;
-				if (buffer.format != RGBA32 || buffer.premultiplied)
-				{
-					var copy = clone();
-					copy.premultiplied = false;
-					copy.format = RGBA32;
-					return Png.encode(copy.width, copy.height, copy.buffer.data.toBytes(), copy.buffer.stride);
-				}
-				return Png.encode(width, height, buffer.data.toBytes(), buffer.stride);
-
-			default:
+				return Png.encode(source.width, source.height, data, stride);
+			case ImageFileFormat.BMP:
+				return Bmp.encode(source.width, source.height, data, stride);
+			case ImageFileFormat.JPEG:
+				return Jpeg.encode(source.width, source.height, data, stride, quality);
 		}
-
-		return null;
 	}
 
 	/**
