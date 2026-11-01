@@ -45,4 +45,17 @@ class Log {
 			println('[WARN] $message', info);
 		}
 	}
+
+	public static inline function print(message:Dynamic):Void
+	{
+		#if sys
+		Sys.print(Std.string(message));
+		#elseif flash
+		untyped __global__["trace"](Std.string(message));
+		#elseif js
+		untyped #if haxe4 js.Syntax.code #else __js__ #end ("console").log(message);
+		#else
+		trace(message);
+		#end
+	}
 }

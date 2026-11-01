@@ -44,4 +44,53 @@ abstract Locale(String) from String to String {
 		}
 		return new Locale("en-US");
 	}
+
+	/**
+		The languages the user prefers, most preferred first, such as `en-US` or
+		`fr`. It is read each time, as the user can change it while the
+		application runs, and is empty where the platform doesn't say.
+	**/
+	public static var preferredLocales(get, never):Array<Locale>;
+
+	private static function get_preferredLocales():Array<Locale>
+	{
+		var locales:Array<Locale> = [];
+
+		#if flash
+		#if air
+		for (language in Capabilities.languages)
+		{
+			locales.push(language);
+		}
+		#else
+		locales.push(Capabilities.language);
+		#end
+		#elseif (js && html5)
+		var languages:Array<String> = untyped navigator.languages;
+		if (languages == null) languages = [untyped navigator.language];
+
+		for (language in languages)
+		{
+			if (language != null) locales.push(language);
+		}
+		#elseif sys
+		// The first of these that is set, as `en_US.UTF-8` or a `:`-separated list of them.
+		for (name in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"])
+		{
+			var value = Sys.getEnv(name);
+			if (value == null || value == "" || value == "C" || value == "POSIX") continue;
+
+			for (entry in value.split(":"))
+			{
+				var language = entry.split(".")[0].split("@")[0].split("_").join("-");
+				if (language != "" && language != "C" && language != "POSIX") locales.push(language);
+			}
+			break;
+		}
+		#end
+
+		return locales;
+	}
+
+
 }

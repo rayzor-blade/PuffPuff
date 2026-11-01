@@ -174,4 +174,203 @@ class Matrix3 {
 		tx += dx;
 		ty += dy;
 	}
+
+	/**
+		Copies the `x` and `y` components from a `Vector4` instance
+		to the `a`/`c`, `b`/`d` or the `tx`/`ty` column of the current
+		matrix
+		@param	column	The column to copy into (0, 1 or 2)
+		@param	vector4	The `Vector4` instance to copy from
+	**/
+	public function copyColumnFrom(column:Int, vector4:Vector4):Void
+	{
+		if (column > 2)
+		{
+			throw "Column " + column + " out of bounds (2)";
+		}
+		else if (column == 0)
+		{
+			a = vector4.x;
+			b = vector4.y;
+		}
+		else if (column == 1)
+		{
+			c = vector4.x;
+			d = vector4.y;
+		}
+		else
+		{
+			tx = vector4.x;
+			ty = vector4.y;
+		}
+	}
+
+	/**
+		Copies a column of the current matrix into a `Vector4`
+		instance. The `w` value will not be modified.
+		@param	column	The column to copy from (0, 1 or 2)
+		@param	vector4	The `Vector4` instance to copy to
+	**/
+	public function copyColumnTo(column:Int, vector4:Vector4):Void
+	{
+		if (column > 2)
+		{
+			throw "Column " + column + " out of bounds (2)";
+		}
+		else if (column == 0)
+		{
+			vector4.x = a;
+			vector4.y = b;
+			vector4.z = 0;
+		}
+		else if (column == 1)
+		{
+			vector4.x = c;
+			vector4.y = d;
+			vector4.z = 0;
+		}
+		else
+		{
+			vector4.x = tx;
+			vector4.y = ty;
+			vector4.z = 1;
+		}
+	}
+
+	/**
+		Copies the values of a `Vector4` instance into a row
+		of the current matrix
+		@param	row	The row to copy into (0 or 1)
+		@param	vector4	The `Vector4` instance to copy from
+	**/
+	public function copyRowFrom(row:Int, vector4:Vector4):Void
+	{
+		if (row > 2)
+		{
+			throw "Row " + row + " out of bounds (2)";
+		}
+		else if (row == 0)
+		{
+			a = vector4.x;
+			c = vector4.y;
+			tx = vector4.z;
+		}
+		else if (row == 1)
+		{
+			b = vector4.x;
+			d = vector4.y;
+			ty = vector4.z;
+		}
+	}
+
+	/**
+		Copies a row of the current matrix into a `Vector4`
+		instance. The `w` value will not be modified.
+		@param	row	The row to copy into (0, 1 or 2)
+		@param	vector4	The `Vector4` instance to copy from
+	**/
+	public function copyRowTo(row:Int, vector4:Vector4):Void
+	{
+		if (row > 2)
+		{
+			throw "Row " + row + " out of bounds (2)";
+		}
+		else if (row == 0)
+		{
+			vector4.x = a;
+			vector4.y = c;
+			vector4.z = tx;
+		}
+		else if (row == 1)
+		{
+			vector4.x = b;
+			vector4.y = d;
+			vector4.z = ty;
+		}
+		else
+		{
+			vector4.setTo(0, 0, 1);
+		}
+	}
+
+	@:dox(hide) public inline function toString():String
+	{
+		return 'matrix($a, $b, $c, $d, $tx, $ty)';
+	}
+
+	/**
+		Transforms a `Rectangle` instance by the current matrix
+		and returns `Rectangle` with the bounds of the transformed
+		rectangle.
+		@param	transform	A `Matrix3` instance to transform by
+		@param	result	(Optional) A `Rectangle` instance to use for the result
+		@return	A `Rectangle` represented the transformed bounds
+	**/
+	public function transformRect(rect:Rectangle, result:Rectangle = null):Rectangle
+	{
+		if (result == null) result = new Rectangle();
+
+		var tx0 = a * rect.x + c * rect.y;
+		var tx1 = tx0;
+		var ty0 = b * rect.x + d * rect.y;
+		var ty1 = ty0;
+
+		var tx = a * (rect.x + rect.width) + c * rect.y;
+		var ty = b * (rect.x + rect.width) + d * rect.y;
+
+		if (tx < tx0) tx0 = tx;
+		if (ty < ty0) ty0 = ty;
+		if (tx > tx1) tx1 = tx;
+		if (ty > ty1) ty1 = ty;
+
+		tx = a * (rect.x + rect.width) + c * (rect.y + rect.height);
+		ty = b * (rect.x + rect.width) + d * (rect.y + rect.height);
+
+		if (tx < tx0) tx0 = tx;
+		if (ty < ty0) ty0 = ty;
+		if (tx > tx1) tx1 = tx;
+		if (ty > ty1) ty1 = ty;
+
+		tx = a * rect.x + c * (rect.y + rect.height);
+		ty = b * rect.x + d * (rect.y + rect.height);
+
+		if (tx < tx0) tx0 = tx;
+		if (ty < ty0) ty0 = ty;
+		if (tx > tx1) tx1 = tx;
+		if (ty > ty1) ty1 = ty;
+
+		result.setTo(tx0 + this.tx, ty0 + this.ty, tx1 - tx0, ty1 - ty0);
+		return result;
+	}
+
+	/** The nine entries, column by column: `a, b, 0, c, d, 0, tx, ty, 1`. **/
+	public function get(index:Int):Float
+	{
+		return switch (index)
+		{
+			case 0: a;
+			case 1: b;
+			case 3: c;
+			case 4: d;
+			case 6: tx;
+			case 7: ty;
+			case 8: 1.0;
+			default: 0.0;
+		}
+	}
+
+	public function set(index:Int, value:Float):Float
+	{
+		switch (index)
+		{
+			case 0: a = value;
+			case 1: b = value;
+			case 3: c = value;
+			case 4: d = value;
+			case 6: tx = value;
+			case 7: ty = value;
+			default:
+		}
+		return value;
+	}
 }

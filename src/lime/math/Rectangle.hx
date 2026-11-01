@@ -187,4 +187,34 @@ class Rectangle {
 		return null;
 		#end
 	}
+
+	/**
+		Returns whether this rectangle contains the specified vector
+		@param	vector	The vector to test
+		@return	Whether the vector is contained in the rectangle
+	**/
+	public function containsVector(vector:Vector2):Bool
+	{
+		return contains(vector.x, vector.y);
+	}
+
+	/**
+		Increases the size of the current rectangle by
+		the given delta vector values
+		@param	vector	A delta vector to increase the size by
+	**/
+	public function inflateVector(vector:Vector2):Void
+	{
+		inflate(vector.x, vector.y);
+	}
+
+	/**
+		Moves the rectangle by the values of a `Vector2`
+		@param	dx	A delta vector
+	**/
+	public function offsetVector(vector:Vector2):Void
+	{
+		x += vector.x;
+		y += vector.y;
+	}
 }

@@ -39,4 +39,29 @@ class URIParser {
 			anchor = URI_REGEX.matched(13) != null ? URI_REGEX.matched(13) : "";
 		}
 	}
+
+	public static var QUERY_REGEX = ~/(?:^|&)([^&=]*)=?([^&]*)/;
+
+	public static function parseQuery(query:String):Array<KVPair>
+	{
+		var result:Array<KVPair> = [];
+
+		for (str in query.split("&"))
+		{
+			if (QUERY_REGEX.match(str))
+			{
+				result.push({k: QUERY_REGEX.matched(1), v: QUERY_REGEX.matched(2)});
+			}
+		}
+
+		return result;
+	}
+}
+
+@:dox(hide) typedef KVPair =
+{
+	k:String,
+	v:String
+
+
 }

@@ -187,4 +187,18 @@ class Future<T> {
 			for (l in __progressListeners) l(progress, total);
 		}
 	}
+
+	/**
+		Create a new `Future` instance based on complete and (optionally) error and/or progress `Event` instances
+	**/
+	public static function ofEvents<T>(onComplete:Event<T->Void>, onError:Event<Dynamic->Void> = null, onProgress:Event<Int->Int->Void> = null):Future<T>
+	{
+		var promise = new Promise<T>();
+
+		onComplete.add(promise.complete, true);
+		if (onError != null) onError.add(promise.error, true);
+		if (onProgress != null) onProgress.add(promise.progress, true);
+
+		return promise.future;
+	}
 }

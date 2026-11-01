@@ -11,6 +11,10 @@ enum abstract JoystickHatPosition(Int) from Int to Int {
 	public var RIGHT_DOWN = 0x06;
 	public var LEFT_UP = 0x09;
 	public var LEFT_DOWN = 0x0C;
+	public var UP_RIGHT = 0x03;
+	public var DOWN_RIGHT = 0x06;
+	public var UP_LEFT = 0x09;
+	public var DOWN_LEFT = 0x0C;
 
 	public var center(get, set):Bool;
 	public var down(get, set):Bool;
