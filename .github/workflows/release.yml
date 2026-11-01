@@ -143,7 +143,7 @@ jobs:
         # by the Intel job: the same source builds both libraries.
         include:
           - { os: ubuntu-24.04,     platform: linux-x86_64,   hashlink: linux-amd64,  haxe: 4.3.6 }
-          - { os: ubuntu-24.04-arm, platform: linux-aarch64,  hashlink: linux-arm64,  haxe: latest }
+          - { os: ubuntu-24.04-arm, platform: linux-aarch64,  hashlink: linux-arm64,  haxe: 4.3.7 }
           - { os: macos-15-intel,   platform: macos-x86_64,   hashlink: darwin-cmake, haxe: 4.3.6 }
           - { os: windows-2022,     platform: windows-x86_64, hashlink: win64,        haxe: 4.3.6 }
     steps:
@@ -153,8 +153,22 @@ jobs:
           name: puffpuff-haxelib
           path: release
       - uses: krdlab/setup-haxe@v2
+        if: matrix.platform != 'linux-aarch64'
         with:
           haxe-version: ${{ matrix.haxe }}
+      - name: Install Haxe 4.3.7, the first release with a Linux ARM build
+        if: matrix.platform == 'linux-aarch64'
+        run: |
+          mkdir -p "$HOME/haxe" "$HOME/neko"
+          curl -fsSL https://github.com/HaxeFoundation/haxe/releases/download/4.3.7/haxe-4.3.7-linux-arm64.tar.gz | tar xz --strip-components=1 -C "$HOME/haxe"
+          curl -fsSL https://github.com/HaxeFoundation/neko/releases/download/v2-4-1/neko-2.4.1-linux-arm64.tar.gz | tar xz --strip-components=1 -C "$HOME/neko"
+          echo "$HOME/haxe" >> "$GITHUB_PATH"
+          echo "$HOME/neko" >> "$GITHUB_PATH"
+          echo "HAXE_STD_PATH=$HOME/haxe/std" >> "$GITHUB_ENV"
+          echo "NEKOPATH=$HOME/neko" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$HOME/neko" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/haxelib"
+          PATH="$HOME/haxe:$HOME/neko:$PATH" NEKOPATH="$HOME/neko" LD_LIBRARY_PATH="$HOME/neko" haxelib setup "$HOME/haxelib"
       - run: haxelib newrepo
       - run: haxelib install release/puffpuff.zip --always
       - name: Install the libraries HashLink's fmt.hdll loads
