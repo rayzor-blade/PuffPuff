@@ -4,6 +4,8 @@
 #   tests/openfl/run.sh [area ...]    areas of ../openfl/tests; none means all of them
 #   OPENFL=path                       OpenFL checkout with the openfl_wgpu gate (default ../openfl)
 #   ASH=path                          ash binary
+#
+# Ash runs with --no-fma: OpenFL's tests compare floating-point results that HashLink rounds one operation at a time.
 #   PUFFPUFF_HAXE_FLAGS=...           extra Haxe compiler flags
 #
 # Areas listed in `hosted` run inside tests/openfl/host/UnitHost.hx.
@@ -47,7 +49,7 @@ for area in $areas; do
 			cp -R "$dir/assets" "$out/assets"
 		fi
 	fi
-	run=$(cd "$out" && perl -e 'alarm 180; exec @ARGV' "$ash" "$area.hl" 2>&1) && status=0 || status=$?
+	run=$(cd "$out" && perl -e 'alarm 180; exec @ARGV' "$ash" --no-fma "$area.hl" 2>&1) && status=0 || status=$?
 	summary=$(echo "$run" | awk '/^assertations:/{a=$2} /^successes:/{s=$2} /^errors:/{e=$2} /^failures:/{f=$2} END{if (a != "") printf "%s assertions, %s failures, %s errors", a, f, e}')
 	if [ -z "$summary" ]; then
 		echo "$area: no result (exit $status): $(echo "$run" | grep -v '^\[ash\]' | tail -1)"

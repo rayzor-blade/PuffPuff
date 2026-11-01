@@ -4,9 +4,9 @@
   "license": "MIT",
   "tags": ["lime", "openfl", "flixel", "hashlink", "wgpu", "backend", "game"],
   "description": "Next-generation HashLink & WebGPU backend for OpenFL and HaxeFlixel.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "classPath": "src",
-  "releasenote": "Initial standalone release decoupled from ashui.",
+  "releasenote": "Runs on the standard HashLink VM as well as Ash: blinc_abi's native signatures now match what HashLink checks. 0.1.0 only runs on Ash.",
   "contributors": ["rayzor", "darmie"],
   "dependencies": {
     "hlwindow": "0.3.2",

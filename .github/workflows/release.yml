@@ -132,9 +132,65 @@ jobs:
           path: release/puffpuff.zip
           if-no-files-found: error
 
+  hashlink:
+    name: HashLink on ${{ matrix.platform }}
+    needs: package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     platform: linux-x86_64,   hashlink: linux-amd64 }
+          - { os: ubuntu-24.04-arm, platform: linux-aarch64,  hashlink: linux-arm64 }
+          - { os: macos-latest,     platform: macos-aarch64,  hashlink: darwin-arm64-cmake }
+          - { os: macos-15-intel,   platform: macos-x86_64,   hashlink: darwin-cmake }
+          - { os: windows-2022,     platform: windows-x86_64, hashlink: win64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: puffpuff-haxelib
+          path: release
+      - uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.6
+      - run: haxelib newrepo
+      - run: haxelib install release/puffpuff.zip --always
+      - name: Install the libraries HashLink's fmt.hdll loads
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpng16-16t64 libturbojpeg libvorbisfile3 libogg0 zlib1g
+      - name: Download HashLink
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download latest --repo HaxeFoundation/hashlink --pattern "hashlink-*-${{ matrix.hashlink }}.*" --dir hashlink-download
+          cd hashlink-download
+          shopt -s nullglob
+          for f in *.tar.gz; do tar xzf "$f"; done
+          for f in *.zip; do unzip -q "$f"; done
+          ls
+          hl=$(find . -type f \( -name hl -o -name hl.exe \) | head -1)
+          echo "HL_DIR=$(cd "$(dirname "$hl")" && pwd)" >> "$GITHUB_ENV"
+      - name: Compile with every native bound
+        run: haxe tests/natives/build.hxml
+      - name: Load it on HashLink
+        shell: bash
+        run: |
+          cd tests/natives/bin
+          case "$RUNNER_OS" in
+            Linux) export LD_LIBRARY_PATH="$PWD:$HL_DIR" ;;
+            macOS) export DYLD_LIBRARY_PATH="$PWD:$HL_DIR" ;;
+            Windows) export PATH="$PWD:$HL_DIR:$PATH" ;;
+          esac
+          "$HL_DIR/hl" natives.hl | tee out.txt
+          grep -q "all natives bound" out.txt
+
   publish:
     name: publish release
-    needs: package
+    needs: [package, hashlink]
     if: needs.package.outputs.tag != ''
     runs-on: ubuntu-24.04
     permissions:
