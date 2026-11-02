@@ -2,5 +2,6 @@
 -cp tests/natives
 -main Main
 -D ash_future_stock
+-D ash_simd_require_hdll
 -dce no
 -hl tests/natives/bin/natives.hl
