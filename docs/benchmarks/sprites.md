@@ -25,11 +25,6 @@ Batching textured quads with `puffpuff.gpu.QuadBatcher` and drawing them instanc
   bitmap-filled rectangles. Set against the sprite frame it shows what instancing saves: a square is 144 bytes as
   triangles and 48 as an instance, so `drawQuads` and `Tilemap` stay on the instanced path.
 
-## Known weak spots
-
-- Each flush of a batch creates a new uniform buffer and a new storage buffer instead of reusing per-frame buffers
-  as the vector path does. Not measured yet; it matters for scenes with many small batches.
-
 ## Reproducing
 
 ```sh
